@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.DS_Store
+
+# Segredos — nunca commitar
+.env
+.env.*
+!.env.example
+
+# Saídas de scraping e arquivos baixados dos portais
+.just-scrape/
+downloads/
+*.xlsx
+!referencias/*.xlsx
+
+# Trigger.dev
+.trigger/
