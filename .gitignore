@@ -12,6 +12,8 @@ dist/
 downloads/
 *.xlsx
 !referencias/*.xlsx
+# Fixtures de teste são versionadas de propósito: os testes nunca batem no portal ao vivo
+!tests/fixtures/*.xlsx
 
 # Trigger.dev
 .trigger/

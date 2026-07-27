@@ -39,7 +39,7 @@ Referências de domínio: [ciclo pecuário](../../../referencias/ciclo-pecuario.
 | Entregável | `.xlsx` no layout atual + aba de KPIs | Zero mudança de hábito para o fazendeiro |
 | Cadência | Coleta diária, envio diário | Mantém o ritmo atual |
 | Credencial do INDEA | Conta do sócio, 1 login/dia | Autorizada; mesma conta que ele já usa manualmente |
-| Plano do Supabase | Pro (já contratado) | Volume estimado de 1–2 GB/ano excede o gratuito |
+| Plano do Supabase | Pro (já contratado) | Volume medido de ~3,1 GB/ano (1,9 de dados + 1,2 de índices) excede o gratuito; os 8 GB do Pro dão ~2,5 anos de folga |
 
 ## Arquitetura
 
@@ -120,10 +120,14 @@ GET https://api.ms.gov.br/api-esaniagro/v1/relatorio/DocumentosDeTransitoRel
 Sem token, sem cookie, sem browser. `especieAnimalID=1` é BOVINO.
 
 - **Não** enviar `finalidadeID` — o lookup de IDs exige token, e filtrar pela coluna localmente traz as outras finalidades de graça.
-- Localizar o cabeçalho pela string `"Tipo de Documento"`, nunca por índice fixo de linha.
+- Localizar o cabeçalho pela string `"Tipo de Documento"`, nunca por índice fixo de linha (está na linha 19 hoje).
+- **Há células mescladas**, então rótulos se repetem em colunas vizinhas: montar o mapa de colunas pela **primeira ocorrência** de cada rótulo.
 - A coluna vem escrita **`Total Femêa`** (typo no arquivo original).
-- `Data Emissão` é serial numérico do Excel (epoch 1899-12-30) — converter.
-- Desnormalizar as 8 colunas de faixa etária em linhas por `(sexo, faixa)`.
+- `Data Emissão` chega como **serial numérico do Excel** na leitura por streaming (epoch 1899-12-30) — converter manualmente e extrair a data com **getters UTC**. Com getters locais, uma GTA emitida à meia-noite cai no dia anterior e, na virada do mês, no mês errado.
+- Desnormalizar as 8 colunas de faixa etária em linhas por `(sexo, faixa)`. Verificado: a soma das faixas bate exatamente com `Total Femêa` e `Total Macho`.
+- O arquivo contém finalidades com **texto corrompido** na origem (uma linha traz `AGLOMERA<?>ÃO SEM FINALIDADE COMERCIAL`). Como o filtro é por igualdade exata com `ABATE`, isso não afeta o indicador — mas não normalizar nem "consertar" acentos, para não criar falsos positivos.
+
+Amostra verificada (20 a 26/07/2026, bovino, finalidade ABATE): fêmea 29.991, macho 30.644.
 
 ### MT — INDEA 🟡
 
@@ -162,12 +166,25 @@ Vigia de pasta pública no Google Drive.
 
 - Listar a subpasta do ano via **Drive API v3 com API key** (o parse do HTML funciona mas é frágil e pagina a cada ~50 itens).
 - Comparar `(nome, id, modifiedTime, md5Checksum)` com o registrado em `coletas`; baixar apenas o novo ou alterado via `https://drive.google.com/uc?export=download&id=<fileId>` (~16 MB por mês).
-- **Não assumir ordem nem continuidade**: o Pará publica com cerca de dois meses de atraso e fora de sequência. Em 27/07/2026 o último mês disponível era maio.
+- **Não assumir ordem nem continuidade**: o Pará publica com cerca de dois meses de atraso e fora de sequência. Em 27/07/2026 o último mês disponível era maio (publicado em 23/06, ~23 dias após o fim do mês).
 - Detectar a subpasta do ano novo (`GTAs 2027 dados públicos`) na virada.
-- O sexo não é coluna própria: vem em `taxonomia` como `"BOVINO, MACHO, 13 A 24 MESES"` — separar por vírgula.
-- Excluir `ABATE SANITÁRIO` do indicador; armazenar marcado.
+
+**Formato do arquivo (verificado no arquivo real de maio/2026):** a planilha é **wide**, não long. São 60.936 linhas (1 cabeçalho + 60.935 dados) e 65 colunas, com **uma linha por GTA** (`gta_numero` é único).
+
+- A coluna `taxonomia` contém **apenas a espécie** (`"BOVINO"`), não sexo nem idade.
+- Sexo e faixa etária são **nomes de coluna**: 48 colunas de categoria no formato `ESPÉCIE, SEXO, FAIXA` (ex.: `BOVINO, FÊMEA, ACIMA DE 36 MESES`), cada uma com a quantidade de animais daquela categoria, zero quando não se aplica.
+- Portanto, para separar macho de fêmea somam-se as **4 colunas MACHO** e as **4 colunas FÊMEA** de bovino — não se lê `taxonomia`.
+- Não há células mescladas. Cabeçalho na linha 1.
+
+**Filtro de finalidade — igualdade exata, nunca prefixo.** O arquivo tem `ABATE` (20.905 linhas), `ABATE SANITÁRIO` (3) e também `SACRIFÍCIO` (1). Um filtro por prefixo `ABATE%` incluiria o sanitário; ambos ficam armazenados mas fora do indicador.
 
 Roda diariamente, mas quase todo dia não faz nada — é o comportamento esperado, não uma falha.
+
+### Validação de ponta a ponta (confirmada)
+
+Aplicando a regra acima ao arquivo real de maio/2026 (`finalidade = 'ABATE'` exato, espécie bovina, somando as colunas de categoria por sexo), o resultado é **fêmea 188.406 e macho 152.453** — **idêntico** ao que o sócio tem na planilha dele para PA/maio/2026.
+
+Isso é a evidência mais forte que temos de que a automação reproduz o trabalho manual sem desvio, e vira o teste de aceitação do coletor do Pará.
 
 ## Planilha e envio
 
