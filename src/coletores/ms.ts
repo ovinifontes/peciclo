@@ -14,6 +14,28 @@ const USER_AGENT =
 const FAIXAS = ["0 A 12 MESES", "13 A 24 MESES", "25 A 36 MESES", "ACIMA DE 36 MESES"] as const;
 const ROTULO_SEXO: Record<Sexo, string> = { FEMEA: "FÊMEA", MACHO: "MACHO" };
 
+/**
+ * Divide uma janela em pedaços de no máximo `dias`. O relatório do IAGRO é
+ * lento e pesado (~6 MB para um mês, ~2 min); pedir em fatias evita estourar o
+ * tempo limite do proxy e da task, e cada fatia é arquivada separadamente.
+ */
+export function dividirJanela(janela: Janela, dias = 7): Janela[] {
+  const fatias: Janela[] = [];
+  const fim = new Date(`${janela.fim}T00:00:00Z`);
+  let cursor = new Date(`${janela.inicio}T00:00:00Z`);
+
+  while (cursor <= fim) {
+    const inicioFatia = cursor.toISOString().slice(0, 10);
+    const fimCursor = new Date(cursor);
+    fimCursor.setUTCDate(fimCursor.getUTCDate() + dias - 1);
+    const fimFatia = (fimCursor > fim ? fim : fimCursor).toISOString().slice(0, 10);
+    fatias.push({ inicio: inicioFatia, fim: fimFatia });
+    cursor = new Date(fimCursor);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return fatias;
+}
+
 export function urlRelatorioMs(janela: Janela): string {
   const p = new URLSearchParams({
     especieAnimalID: String(ESPECIE_BOVINO),

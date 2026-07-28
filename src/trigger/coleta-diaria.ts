@@ -22,9 +22,12 @@ export const coletaDiaria = schedules.task({
     const dataLocal = payload.timestamp.toLocaleDateString("en-CA", {
       timeZone: payload.timezone,
     });
-    const janela = { inicio: dataLocal, fim: dataLocal };
     const ano = Number(dataLocal.slice(0, 4));
     const mes = Number(dataLocal.slice(5, 7));
+    // Mês corrente até hoje. Todos os coletores reconsultam a competência
+    // inteira, então cada execução recalcula o mês em vez de depender do
+    // acúmulo dia a dia — se um dia falhar, o seguinte conserta sozinho.
+    const janela = { inicio: `${ano}-${String(mes).padStart(2, "0")}-01`, fim: dataLocal };
 
     // batch.triggerByTaskAndWait roda em paralelo e espera todos; um filho que
     // falha não derruba o pai, então a planilha sai com o que temos.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsearMs, urlRelatorioMs } from "../../src/coletores/ms.js";
+import { dividirJanela, parsearMs, urlRelatorioMs } from "../../src/coletores/ms.js";
 
 const FIXTURE = "tests/fixtures/ms-iagro-2026-07-20-a-26.xlsx";
 
@@ -49,5 +49,33 @@ describe("parsearMs", () => {
   it("não emite registros com quantidade zero", async () => {
     const registros = await parsearMs(FIXTURE);
     expect(registros.every((r) => r.quantidade > 0)).toBe(true);
+  });
+});
+
+describe("dividirJanela", () => {
+  it("devolve uma fatia só quando a janela cabe no tamanho", () => {
+    expect(dividirJanela({ inicio: "2026-07-01", fim: "2026-07-05" }, 7)).toEqual([
+      { inicio: "2026-07-01", fim: "2026-07-05" },
+    ]);
+  });
+
+  it("fatia um mês inteiro em pedaços de 7 dias, sem sobrepor nem pular dia", () => {
+    const fatias = dividirJanela({ inicio: "2026-07-01", fim: "2026-07-28" }, 7);
+    expect(fatias).toEqual([
+      { inicio: "2026-07-01", fim: "2026-07-07" },
+      { inicio: "2026-07-08", fim: "2026-07-14" },
+      { inicio: "2026-07-15", fim: "2026-07-21" },
+      { inicio: "2026-07-22", fim: "2026-07-28" },
+    ]);
+  });
+
+  it("respeita o fim da janela na última fatia", () => {
+    const fatias = dividirJanela({ inicio: "2026-07-01", fim: "2026-07-10" }, 7);
+    expect(fatias.at(-1)).toEqual({ inicio: "2026-07-08", fim: "2026-07-10" });
+  });
+
+  it("cobre a virada de mês sem perder dias", () => {
+    const fatias = dividirJanela({ inicio: "2026-07-28", fim: "2026-08-03" }, 7);
+    expect(fatias).toEqual([{ inicio: "2026-07-28", fim: "2026-08-03" }]);
   });
 });
