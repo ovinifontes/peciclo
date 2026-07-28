@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
 import type { LinhaMensal } from "../dados/mensal.js";
 import type { Sexo, UF } from "../tipos.js";
+import { calcularKpis, type Kpi } from "./kpis.js";
+import { lerAbateMensal } from "../dados/mensal.js";
 
 /**
  * Ordem das colunas na planilha que o fazendeiro já conhece.
@@ -93,4 +95,64 @@ export function escreverAbaDados(planilha: ExcelJS.Workbook, grade: Grade): void
     aba.getColumn(c).width = 12;
     aba.getColumn(c).numFmt = "#,##0";
   }
+}
+
+const ROTULO_ESCOPO: Record<string, string> = {
+  MT: "Mato Grosso",
+  MS: "Mato Grosso do Sul",
+  RO: "Rondônia",
+  PA: "Pará",
+  CONSOLIDADO: "Consolidado",
+};
+
+/** Aba de leitura do ciclo: participação de fêmeas e suas variações. */
+export function escreverAbaCiclo(planilha: ExcelJS.Workbook, kpis: Kpi[]): void {
+  const aba = planilha.addWorksheet("Ciclo");
+
+  aba.addRow([
+    "Estado", "Ano", "Mês", "Fêmeas", "Machos", "Total",
+    "% Fêmeas", "Var. mês anterior (p.p.)", "Var. ano anterior (p.p.)", "Média móvel 12m",
+  ]);
+  aba.getRow(1).font = { bold: true };
+
+  const ordenados = [...kpis].sort(
+    (a, b) => b.ano - a.ano || b.mes - a.mes || a.uf.localeCompare(b.uf),
+  );
+
+  for (const k of ordenados) {
+    aba.addRow([
+      ROTULO_ESCOPO[k.uf] ?? k.uf,
+      k.ano,
+      NOMES_MESES[k.mes - 1],
+      k.femeas,
+      k.machos,
+      k.total,
+      k.participacaoFemeas,
+      k.variacaoMesAnteriorPp,
+      k.variacaoAnoAnteriorPp,
+      k.mediaMovel12m,
+    ]);
+  }
+
+  aba.getColumn(1).width = 20;
+  for (const c of [4, 5, 6]) aba.getColumn(c).numFmt = "#,##0";
+  for (const c of [7, 8, 9, 10]) {
+    aba.getColumn(c).numFmt = "0.0%";
+    aba.getColumn(c).width = 22;
+  }
+}
+
+/** Monta a planilha completa a partir do banco. */
+export async function gerarPlanilha(): Promise<Buffer> {
+  const dados = await lerAbateMensal();
+  const anos = dados.map((d) => d.ano);
+  const anoInicial = anos.length ? Math.min(...anos) : new Date().getUTCFullYear();
+  const anoFinal = Math.max(anoInicial, new Date().getUTCFullYear());
+
+  const planilha = new ExcelJS.Workbook();
+  planilha.created = new Date();
+  escreverAbaDados(planilha, montarGradeDados(dados, anoInicial, anoFinal));
+  escreverAbaCiclo(planilha, calcularKpis(dados));
+
+  return Buffer.from(await planilha.xlsx.writeBuffer());
 }
