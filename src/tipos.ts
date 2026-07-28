@@ -1,0 +1,40 @@
+export type UF = "MT" | "MS" | "RO" | "PA";
+export type Sexo = "MACHO" | "FEMEA";
+export type FonteDado = "gta_agregada" | "powerbi" | "manual";
+export type TipoColeta = "diaria" | "rejanela" | "mensal";
+export type StatusColeta = "ok" | "falha" | "sem_dados";
+
+/** Janela de datas em ISO (YYYY-MM-DD), inclusiva nas duas pontas. */
+export interface Janela {
+  inicio: string;
+  fim: string;
+}
+
+/** Uma linha de GTA desnormalizada por sexo e faixa etária. */
+export interface RegistroGta {
+  uf: UF;
+  documentoTipo: string;
+  documentoNumero: string;
+  /** String vazia quando a fonte não traz série. Faz parte da chave natural. */
+  documentoSerie: string;
+  /** ISO YYYY-MM-DD. */
+  dataEmissao: string;
+  finalidade: string;
+  sexo: Sexo;
+  /** null quando a fonte não informa faixa. */
+  faixaEtaria: string | null;
+  quantidade: number;
+  municipioOrigem: string | null;
+  municipioDestino: string | null;
+  ufDestino: string | null;
+}
+
+/** Total já agregado — usado por fontes que só entregam o mês fechado (RO). */
+export interface AgregadoMensal {
+  uf: UF;
+  ano: number;
+  mes: number;
+  finalidade: string;
+  sexo: Sexo;
+  quantidade: number;
+}
