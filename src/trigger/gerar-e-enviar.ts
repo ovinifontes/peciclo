@@ -1,0 +1,54 @@
+import { logger, task } from "@trigger.dev/sdk";
+import { lerConfig } from "../config.js";
+import { arquivarBruto } from "../dados/arquivos.js";
+import { gerarPlanilha } from "../planilha/gerar.js";
+import { enviarDocumento, instanciaConectada } from "../notificacao/evolution.js";
+import { alertarOperador } from "../notificacao/alertas.js";
+
+export const gerarEEnviar = task({
+  id: "gerar-e-enviar",
+  machine: "small-2x",
+  maxDuration: 600,
+  run: async (payload: { dataReferencia: string; ufsComFalha: string[] }) => {
+    const cfg = lerConfig();
+    const arquivo = await gerarPlanilha();
+    const nomeArquivo = `abate-ciclo-pecuario-${payload.dataReferencia}.xlsx`;
+
+    await arquivarBruto({ caminho: `planilhas/${nomeArquivo}`, conteudo: arquivo });
+
+    if (!(await instanciaConectada({
+      instancia: cfg.evolutionInstancia,
+      apiKey: cfg.evolutionApiKey,
+      baseUrl: cfg.evolutionBaseUrl,
+    }))) {
+      await alertarOperador(
+        "Instância da Evolution desconectada",
+        `A planilha de ${payload.dataReferencia} foi gerada e arquivada, mas não pôde ser enviada.`,
+      );
+      return { enviados: 0, arquivada: true };
+    }
+
+    let enviados = 0;
+    for (const numero of cfg.whatsappDestinatarios) {
+      try {
+        await enviarDocumento({
+          instancia: cfg.evolutionInstancia,
+          apiKey: cfg.evolutionApiKey,
+          baseUrl: cfg.evolutionBaseUrl,
+          numero,
+          arquivo,
+          nomeArquivo,
+          legenda: `Abate bovino — atualizado em ${payload.dataReferencia}`,
+        });
+        enviados++;
+      } catch (erro) {
+        // Um destinatário com problema não pode impedir os outros de receber.
+        logger.error("falha ao enviar para destinatário", {
+          erro: erro instanceof Error ? erro.message : String(erro),
+        });
+      }
+    }
+
+    return { enviados, arquivada: true };
+  },
+});
