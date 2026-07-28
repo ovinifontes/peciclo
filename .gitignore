@@ -17,7 +17,3 @@ downloads/
 
 # Trigger.dev
 .trigger/
-
-# O token de push local não tem escopo `workflow`, então o arquivo de
-# automação é criado/editado pela interface web do GitHub.
-.github/
