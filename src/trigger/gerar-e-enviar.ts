@@ -4,6 +4,8 @@ import { arquivarBruto } from "../dados/arquivos.js";
 import { gerarPlanilha } from "../planilha/gerar.js";
 import { enviarDocumento, instanciaConectada } from "../notificacao/evolution.js";
 import { alertarOperador } from "../notificacao/alertas.js";
+import { detectarAnomalias } from "../planilha/anomalias.js";
+import { lerAbateMensal } from "../dados/mensal.js";
 
 export const gerarEEnviar = task({
   id: "gerar-e-enviar",
@@ -12,6 +14,15 @@ export const gerarEEnviar = task({
   run: async (payload: { dataReferencia: string; ufsComFalha: string[] }) => {
     const cfg = lerConfig();
     const arquivo = await gerarPlanilha();
+
+    // Alerta, nunca bloqueia: a planilha vai de qualquer forma.
+    const anomalias = detectarAnomalias(await lerAbateMensal());
+    if (anomalias.length > 0) {
+      await alertarOperador(
+        `Valores fora do padrão em ${anomalias.length} série(s)`,
+        anomalias.map((a) => a.mensagem).join("\n"),
+      );
+    }
     const nomeArquivo = `abate-ciclo-pecuario-${payload.dataReferencia}.xlsx`;
 
     await arquivarBruto({ caminho: `planilhas/${nomeArquivo}`, conteudo: arquivo });
