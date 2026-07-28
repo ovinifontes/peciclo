@@ -1,6 +1,7 @@
 import { batch, logger, schedules } from "@trigger.dev/sdk";
 import { coletorMs } from "./coletor-ms.js";
 import { coletorMt } from "./coletor-mt.js";
+import { coletorRo } from "./coletor-ro.js";
 import { coletorPa } from "./coletor-pa.js";
 import { gerarEEnviar } from "./gerar-e-enviar.js";
 import { alertarOperador } from "../notificacao/alertas.js";
@@ -32,10 +33,11 @@ export const coletaDiaria = schedules.task({
     const { runs } = await batch.triggerByTaskAndWait([
       { task: coletorMs, payload: { janela } },
       { task: coletorMt, payload: { ano, mes, ateIso: dataLocal } },
+      { task: coletorRo, payload: { ano, mes } },
       { task: coletorPa, payload: { ano } },
     ]);
 
-    const ufs = ["MS", "MT", "PA"] as const;
+    const ufs = ["MS", "MT", "RO", "PA"] as const;
     const falhas: Array<{ uf: string; erro: string }> = [];
 
     runs.forEach((r, i) => {

@@ -17,3 +17,7 @@ downloads/
 
 # Trigger.dev
 .trigger/
+
+# Workflow de deploy fica fora do git (o token de push não tem escopo workflow).
+# Para auto-deploy, adicione .github/workflows/deploy.yml pela interface web do GitHub.
+.github/

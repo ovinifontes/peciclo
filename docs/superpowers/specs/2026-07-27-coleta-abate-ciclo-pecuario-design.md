@@ -153,9 +153,9 @@ Consequências:
 
 **Limites:** 1 login por dia, User-Agent identificável, sem paralelismo — é um portal público de governo atrás de WAF.
 
-### RO — IDARON 🔴
+### RO — IDARON 🔴 → ✅ (resolvido via HTTP puro, 2026-07-28)
 
-O dado vem de um relatório **Power BI publish-to-web**, sem login.
+O dado vem de um relatório **Power BI publish-to-web**, sem login. **Resolvido por engenharia reversa: os dados de sexo estão na view `vw_DASHBOARD_GTA_ESTRATIFICACAO_SITE`, coluna `FAIXA_ETARIA_PERSONALIZADA` (termina em " F"/" M"). A SemanticQuery filtra `ID_ESPECIE=1` (bovino), `DS_FINALIDADE='Abate'`, `ANO`, `MES` e agrupa por faixa; o parser decodifica o DSR e soma por sexo. Validado contra a planilha do sócio — jan/2026 bate na unidade (F=154.166, M=125.414). Funciona sem navegador. Segue a descrição original do plano de descoberta (mantida por contexto):**
 
 Estratégia em dois papéis:
 - **Descoberta (uma vez):** browser headless abre o relatório, aciona os filtros de espécie/finalidade/mês, e intercepta o `POST .../public/reports/querydata?synchronous=true`. O corpo dessa requisição (`SemanticQuery`) é salvo.

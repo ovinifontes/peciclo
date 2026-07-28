@@ -1,5 +1,4 @@
 import { defineConfig } from "@trigger.dev/sdk";
-import { playwright } from "@trigger.dev/build/extensions/playwright";
 
 export default defineConfig({
   // Ref do projeto no Trigger.dev. Fixo aqui (não é segredo) para o deploy via
@@ -19,11 +18,5 @@ export default defineConfig({
       maxTimeoutInMs: 120_000,
       randomize: true,
     },
-  },
-  build: {
-    external: ["playwright"],
-    // version fixada: no deploy via npx a auto-detecção da versão falha.
-    // Deve casar com a versão de playwright no package.json.
-    extensions: [playwright({ browsers: ["chromium"], headless: true, version: "1.56.0" })],
   },
 });

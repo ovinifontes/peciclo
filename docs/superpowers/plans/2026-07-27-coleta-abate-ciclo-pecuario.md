@@ -2801,11 +2801,13 @@ A sessão autenticada revelou que o relatório do INDEA se chama "GTA **Condensa
 
 **Pendente de credencial em produção:** cadastrar `INDEA_CPF`/`INDEA_SENHA` no ambiente do Trigger.dev (Task 17). O CHECK de `abate_mensal.fonte` na migration da Task 2 já inclui `gta_condensada`.
 
-## Task 14: Coletor do RO (IDARON) — PARCIAL (bloqueada por rede)
+## Task 14: Coletor do RO (IDARON) — CONCLUÍDA (via HTTP puro)
 
 O dado vem de um Power BI publicado na web. A estratégia usa o browser **só na descoberta** e HTTP puro em produção.
 
-**⚠️ Bloqueio de ambiente:** o cluster `*.analysis.windows.net` (onde vive o endpoint `querydata`) é **inacessível da máquina de desenvolvimento** (TLS reset, HTTP 000 — confirmado). Sem alcançá-lo não dá para capturar a query real nem uma resposta para calibrar o parser. Por isso o RO ficou **implementado em scaffold, mas não finalizado nem ligado ao batch diário**. A finalização (rodar `scripts/descobrir-consulta-ro.ts`, colar o corpo em `montarConsulta`, validar `parsearRespostaPowerBi` contra a resposta real, e então ligar `coletorRo` ao batch) precisa acontecer no ambiente de deploy do Trigger.dev ou numa rede sem o bloqueio.
+**✅ RESOLVIDO (2026-07-28):** a rede voltou a alcançar o cluster e a captura headless foi feita da própria máquina de dev. Descobriu-se a view de estratificação (`vw_DASHBOARD_GTA_ESTRATIFICACAO_SITE`, `FAIXA_ETARIA_PERSONALIZADA` com sufixo " F"/" M"), montou-se a SemanticQuery (ID_ESPECIE=1, DS_FINALIDADE='Abate', ANO, MES, agrupado por faixa) e o parser DSR. Validado contra a planilha do sócio (jan/2026 exato). O coletor roda por HTTP puro (Playwright removido do projeto), está ligado ao batch e deployado. O texto abaixo é histórico.
+
+**(histórico) ⚠️ Bloqueio de ambiente:** o cluster `*.analysis.windows.net` (onde vive o endpoint `querydata`) é **inacessível da máquina de desenvolvimento** (TLS reset, HTTP 000 — confirmado). Sem alcançá-lo não dá para capturar a query real nem uma resposta para calibrar o parser. Por isso o RO ficou **implementado em scaffold, mas não finalizado nem ligado ao batch diário**. A finalização (rodar `scripts/descobrir-consulta-ro.ts`, colar o corpo em `montarConsulta`, validar `parsearRespostaPowerBi` contra a resposta real, e então ligar `coletorRo` ao batch) precisa acontecer no ambiente de deploy do Trigger.dev ou numa rede sem o bloqueio.
 
 **O que já foi implementado e commitado:**
 - `src/coletores/ro.ts` — `extrairChaveRecurso` (decodifica o `r=`, testado), `descobrirRelatorio` (relê o link na página do IDARON, acessível), `parsearRespostaPowerBi` (walk do DSR, testado contra fixture sintético), e `coletarRo`/`montarConsulta` que lançam `ConsultaNaoConfiguradaError` até a captura.
