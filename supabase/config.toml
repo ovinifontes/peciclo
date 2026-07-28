@@ -1,0 +1,8 @@
+# Configuração mínima do Supabase CLI.
+# O project_id é preenchido por `supabase link --project-ref <ref>` quando as
+# credenciais estiverem disponíveis. As migrations em migrations/ já foram
+# validadas contra um Postgres real (PGlite); aplicar com `supabase db push`.
+project_id = "peciclo"
+
+[db]
+major_version = 15
