@@ -1,5 +1,6 @@
 import { batch, logger, schedules } from "@trigger.dev/sdk";
 import { coletorMs } from "./coletor-ms.js";
+import { coletorMt } from "./coletor-mt.js";
 import { coletorPa } from "./coletor-pa.js";
 import { gerarEEnviar } from "./gerar-e-enviar.js";
 import { alertarOperador } from "../notificacao/alertas.js";
@@ -21,15 +22,20 @@ export const coletaDiaria = schedules.task({
       timeZone: payload.timezone,
     });
     const janela = { inicio: dataLocal, fim: dataLocal };
+    const ano = Number(dataLocal.slice(0, 4));
+    const mes = Number(dataLocal.slice(5, 7));
 
     // batch.triggerByTaskAndWait roda em paralelo e espera todos; um filho que
     // falha não derruba o pai, então a planilha sai com o que temos.
+    // MS e PA dão detalhe por GTA (janela do dia / arquivo do mês); MT e RO são
+    // agregados por competência (o INDEA e o Power BI já vêm somados por mês).
     const { runs } = await batch.triggerByTaskAndWait([
       { task: coletorMs, payload: { janela } },
-      { task: coletorPa, payload: { ano: Number(dataLocal.slice(0, 4)) } },
+      { task: coletorMt, payload: { ano, mes, ateIso: dataLocal } },
+      { task: coletorPa, payload: { ano } },
     ]);
 
-    const ufs = ["MS", "PA"] as const;
+    const ufs = ["MS", "MT", "PA"] as const;
     const falhas: Array<{ uf: string; erro: string }> = [];
 
     runs.forEach((r, i) => {

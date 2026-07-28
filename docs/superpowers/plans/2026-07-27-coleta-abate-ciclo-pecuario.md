@@ -409,7 +409,7 @@ create table if not exists public.abate_mensal (
   constraint abate_mensal_ano_check   check (ano between 2015 and 2100),
   constraint abate_mensal_mes_check   check (mes between 1 and 12),
   constraint abate_mensal_sexo_check  check (sexo in ('MACHO','FEMEA')),
-  constraint abate_mensal_fonte_check check (fonte in ('gta_agregada','powerbi','manual')),
+  constraint abate_mensal_fonte_check check (fonte in ('gta_agregada','gta_condensada','powerbi','manual')),
   constraint abate_mensal_qtd_check   check (quantidade >= 0)
 );
 
@@ -2780,322 +2780,26 @@ git commit -m "feat: coletor do PA validado contra os números reais de maio/202
 
 ---
 
-## Task 13: Coletor do MT (INDEA)
+## Task 13: Coletor do MT (INDEA) — CONCLUÍDA (modelo corrigido)
 
-**Este é o único ponto do plano que exige um passo manual antes de codificar.** O formulário de export vive atrás do login e não pode ser mapeado de fora.
+**Executada em 28/07/2026 na sessão de mapeamento. O modelo mudou em relação ao rascunho original deste plano.**
 
-**Files:**
-- Create: `src/coletores/mt.ts`, `src/trigger/coletor-mt.ts`, `tests/coletores/mt.test.ts`
-- Modify: `src/trigger/coleta-diaria.ts`
+A sessão autenticada revelou que o relatório do INDEA se chama "GTA **Condensado**" e é literalmente agregado: as colunas são `UF ORIGEM | MUNICÍPIO ORIGEM | UF DESTINO | MUNICÍPIO DESTINO | MÊS | ESPÉCIE | FINALIDADE | FAIXA ETÁRIA | SEXO | QNT`, sem número de GTA, série ou data de emissão. Logo o MT **não** é detalhe por GTA — é um agregado mensal, como o RO.
 
-- [ ] **Step 1: Sessão de mapeamento (manual, uma vez)**
+**O que foi implementado e commitado:**
+- `src/coletores/mt.ts` — login (form clássico `Login.action`, sem captcha/CSRF), export via `POST exportar_gta_condensado.action` com **multipart/form-data** (`dataIni`/`dataFim` em `dd/MM/yyyy`), e `parsearMt` que soma bovino+abate por competência e sexo (`M`→MACHO, `F`→FEMEA, `A` ignorado), devolvendo `AgregadoMensal[]`.
+- `src/trigger/coletor-mt.ts` — grava direto em `abate_mensal` via `gravarAgregados(..., "gta_condensada")`; consulta do 1º dia do mês até hoje (reconsultar ressoma o mês, capturando GTAs atrasadas sem rejanela separada); `AbortTaskRunError` em credencial ausente/rejeitada.
+- `src/dados/mensal.ts` — `gravarAgregados` ganhou o parâmetro `fonte` (`"powerbi" | "gta_condensada"`).
+- `src/trigger/coleta-diaria.ts` — MT ligado ao batch com payload `{ ano, mes, ateIso }`.
+- `tests/coletores/mt.test.ts` (6 testes) e `tests/fixtures/mt-indea-2026-07-20.xlsx`.
 
-Com as credenciais em ambiente, execute e **guarde as saídas**:
+**Fatos verificados no arquivo real:**
+- Consulta por intervalo soma o intervalo (dia 20 + dia 21 = intervalo 20–21, exato) → seguro reconsultar o mês inteiro todo dia.
+- Bovino + abate em 20/07/2026: **fêmea 11.365, macho 14.930** (é o teste de aceitação).
+- `FINALIDADE` tem `ABATE` e `RETORNO DE ABATEDOURO` → igualdade exata, nunca prefixo.
+- Arquivo é XLSX (UTF-8 interno); o `ISO-8859-1` do content-type HTTP não afeta o parse.
 
-```bash
-export INDEA_CPF=... INDEA_SENHA=...
-cd /tmp && rm -f cookies.txt
-
-curl -s -c cookies.txt -b cookies.txt \
-  -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36" \
-  "https://sistemas.indea.mt.gov.br/FronteiraWeb/" -o login.html
-
-curl -s -c cookies.txt -b cookies.txt -L \
-  -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36" \
-  -X POST --data-urlencode "usuario=$INDEA_CPF" --data-urlencode "senha=$INDEA_SENHA" \
-  "https://sistemas.indea.mt.gov.br/FronteiraWeb/Login.action" -o pos-login.html
-
-curl -s -b cookies.txt -L \
-  -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36" \
-  "https://sistemas.indea.mt.gov.br/FronteiraWeb/exportar_gta_condensado_input.action" -o form-export.html
-
-# o que precisamos descobrir:
-grep -oE '<form[^>]*>' form-export.html
-grep -oE '<input[^>]*>' form-export.html
-grep -oE '<select[^>]*name="[^"]*"' form-export.html
-```
-
-Anote: o `action` do formulário, o `method`, o nome exato de cada campo de data, o formato esperado (provavelmente `dd/MM/yyyy`), e quaisquer campos ocultos. Faça **um** export manual e guarde o arquivo em `tests/fixtures/mt-indea-<data>.<ext>` — ele vira o fixture do parser.
-
-Se `pos-login.html` ainda contiver o formulário de login, a credencial foi rejeitada: pare e avise o operador antes de continuar.
-
-- [ ] **Step 2: Escrever o teste do parser (falhando)**
-
-Ajuste os nomes de coluna conforme o arquivo real obtido no Step 1. `tests/coletores/mt.test.ts`:
-
-```ts
-import { describe, expect, it } from "vitest";
-import { parsearMt, sessaoExpirada } from "../../src/coletores/mt.js";
-
-describe("sessaoExpirada", () => {
-  it("detecta que a resposta é a tela de login", () => {
-    expect(sessaoExpirada('<form name="login" action="Login.action">')).toBe(true);
-    expect(sessaoExpirada("<table><tr><td>BOVINO</td></tr></table>")).toBe(false);
-  });
-});
-
-describe("parsearMt", () => {
-  const FIXTURE = "tests/fixtures/mt-indea-2026-07-27.xlsx";
-
-  it("extrai apenas bovinos com os campos da chave natural preenchidos", async () => {
-    const registros = await parsearMt(FIXTURE);
-    expect(registros.length).toBeGreaterThan(0);
-    for (const r of registros) {
-      expect(r.uf).toBe("MT");
-      expect(r.documentoNumero).not.toBe("");
-      expect(r.dataEmissao).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(r.quantidade).toBeGreaterThan(0);
-      expect(["MACHO", "FEMEA"]).toContain(r.sexo);
-    }
-  });
-
-  it("preserva os acentos apesar do ISO-8859-1 da fonte", async () => {
-    const registros = await parsearMt(FIXTURE);
-    const finalidades = new Set(registros.map((r) => r.finalidade));
-    // Se a decodificação estiver errada, aparecem caracteres corrompidos
-    expect([...finalidades].some((f) => /[A-ZÇÃÕÁÉÍÓÚÂÊÔ ]+/.test(f))).toBe(true);
-    expect([...finalidades].every((f) => !f.includes("�"))).toBe(true);
-  });
-});
-```
-
-- [ ] **Step 3: Rodar e confirmar que falha**
-
-Run: `npx vitest run tests/coletores/mt.test.ts`
-Expected: FAIL — módulo não encontrado
-
-- [ ] **Step 4: Implementar `src/coletores/mt.ts`**
-
-Preencha `ACTION_EXPORT` e `CAMPO_DATA_INICIAL`/`CAMPO_DATA_FINAL` com o que foi observado no Step 1.
-
-```ts
-import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { Janela, RegistroGta } from "../tipos.js";
-import { lerLinhas, serialParaDataISO, textoCelula } from "../xlsx/leitor.js";
-
-const BASE = "https://sistemas.indea.mt.gov.br/FronteiraWeb";
-const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-
-// Preenchidos a partir da sessão de mapeamento (Task 13, Step 1).
-const ACTION_EXPORT = "/exportar_gta_condensado.action";
-const CAMPO_DATA_INICIAL = "dataInicial";
-const CAMPO_DATA_FINAL = "dataFinal";
-
-export class CredencialInvalidaError extends Error {
-  constructor(mensagem: string) {
-    super(mensagem);
-    this.name = "CredencialInvalidaError";
-  }
-}
-
-/** Converte YYYY-MM-DD para o dd/MM/yyyy que o formulário espera. */
-export function formatarDataBr(iso: string): string {
-  const [ano, mes, dia] = iso.split("-");
-  return `${dia}/${mes}/${ano}`;
-}
-
-/** Detecta que a resposta voltou sendo a tela de login. */
-export function sessaoExpirada(html: string): boolean {
-  return /Login\.action/i.test(html) && /name="senha"/i.test(html);
-}
-
-function extrairCookies(resposta: Response, jar: Map<string, string>): void {
-  for (const linha of resposta.headers.getSetCookie?.() ?? []) {
-    const [par] = linha.split(";");
-    const [nome, valor] = (par ?? "").split("=");
-    if (nome && valor) jar.set(nome.trim(), valor.trim());
-  }
-}
-
-const serializar = (jar: Map<string, string>) =>
-  [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
-
-/** Semeia cookies, autentica e devolve o cookie jar da sessão. */
-export async function autenticar(cpf: string, senha: string): Promise<Map<string, string>> {
-  const jar = new Map<string, string>();
-
-  const inicial = await fetch(`${BASE}/`, {
-    headers: { "user-agent": USER_AGENT },
-    signal: AbortSignal.timeout(60_000),
-  });
-  extrairCookies(inicial, jar);
-
-  const login = await fetch(`${BASE}/Login.action`, {
-    method: "POST",
-    headers: {
-      "user-agent": USER_AGENT,
-      "content-type": "application/x-www-form-urlencoded",
-      cookie: serializar(jar),
-    },
-    body: new URLSearchParams({ usuario: cpf, senha }),
-    redirect: "manual",
-    signal: AbortSignal.timeout(60_000),
-  });
-  extrairCookies(login, jar);
-
-  if (login.status === 401 || login.status === 403) {
-    throw new CredencialInvalidaError(`INDEA rejeitou a credencial (HTTP ${login.status})`);
-  }
-  return jar;
-}
-
-/** Baixa o export do GTA Condensado para a janela informada. */
-export async function baixarMt(janela: Janela, cpf: string, senha: string): Promise<Buffer> {
-  const jar = await autenticar(cpf, senha);
-
-  const parametros = new URLSearchParams({
-    [CAMPO_DATA_INICIAL]: formatarDataBr(janela.inicio),
-    [CAMPO_DATA_FINAL]: formatarDataBr(janela.fim),
-  });
-
-  const resposta = await fetch(`${BASE}${ACTION_EXPORT}`, {
-    method: "POST",
-    headers: {
-      "user-agent": USER_AGENT,
-      "content-type": "application/x-www-form-urlencoded",
-      cookie: serializar(jar),
-    },
-    body: parametros,
-    signal: AbortSignal.timeout(180_000),
-  });
-
-  if (!resposta.ok) throw new Error(`INDEA respondeu HTTP ${resposta.status} no export`);
-
-  const buffer = Buffer.from(await resposta.arrayBuffer());
-
-  // Se voltou HTML, é a tela de login: a sessão caiu. Nunca gravar isso.
-  const inicio = buffer.subarray(0, 512).toString("latin1");
-  if (sessaoExpirada(inicio) || inicio.trimStart().startsWith("<")) {
-    throw new CredencialInvalidaError("INDEA devolveu a tela de login em vez do arquivo");
-  }
-  return buffer;
-}
-
-export async function parsearMt(caminho: string): Promise<RegistroGta[]> {
-  const registros: RegistroGta[] = [];
-
-  for await (const { valores, colunas } of lerLinhas(caminho, {
-    marcadorCabecalho: "Espécie",
-  })) {
-    const especie = textoCelula(valores[colunas["Espécie"]!]);
-    const finalidade = textoCelula(valores[colunas["Finalidade"]!]);
-    if (especie !== "BOVINO" || !finalidade) continue;
-
-    const bruto = valores[colunas["Data Emissão"]!];
-    if (typeof bruto !== "number" && !(bruto instanceof Date)) continue;
-
-    const comum = {
-      uf: "MT" as const,
-      documentoTipo: "GTA",
-      documentoNumero: textoCelula(valores[colunas["Número"]!]),
-      documentoSerie: textoCelula(valores[colunas["Série"]!] ?? ""),
-      dataEmissao: serialParaDataISO(bruto),
-      finalidade,
-      municipioOrigem: textoCelula(valores[colunas["Município Origem"]!] ?? "") || null,
-      municipioDestino: textoCelula(valores[colunas["Município Destino"]!] ?? "") || null,
-      ufDestino: null,
-    };
-
-    for (const [rotulo, sexo] of [["Fêmea", "FEMEA"], ["Macho", "MACHO"]] as const) {
-      const indice = colunas[rotulo];
-      if (indice === undefined) continue;
-      const quantidade = Number(valores[indice]) || 0;
-      if (quantidade <= 0) continue;
-      registros.push({ ...comum, sexo, faixaEtaria: null, quantidade });
-    }
-  }
-
-  return registros;
-}
-
-export async function coletarMt(janela: Janela, cpf: string, senha: string) {
-  const arquivo = await baixarMt(janela, cpf, senha);
-  const hash = createHash("sha256").update(arquivo).digest("hex");
-  const nomeArquivo = `mt/${janela.inicio}_a_${janela.fim}.xlsx`;
-  const temporario = join(tmpdir(), `mt-${hash.slice(0, 12)}.xlsx`);
-  await writeFile(temporario, arquivo);
-  return { registros: await parsearMt(temporario), arquivo, hash, nomeArquivo };
-}
-```
-
-- [ ] **Step 5: Rodar e confirmar que passa**
-
-Run: `npx vitest run tests/coletores/mt.test.ts`
-Expected: PASS — 3 testes
-
-- [ ] **Step 6: Criar a task com limite de concorrência**
-
-`src/trigger/coletor-mt.ts`:
-
-```ts
-import { AbortTaskRunError, logger, task } from "@trigger.dev/sdk";
-import { CredencialInvalidaError, coletarMt } from "../coletores/mt.js";
-import { abrirColeta, fecharColeta } from "../dados/coletas.js";
-import { arquivarBruto } from "../dados/arquivos.js";
-import { gravarRegistros } from "../dados/registros.js";
-import { rollupJanela } from "../dados/mensal.js";
-import type { Janela, TipoColeta } from "../tipos.js";
-
-export const coletorMt = task({
-  id: "coletor-mt",
-  // Um login por vez: é portal de governo atrás de WAF.
-  queue: { concurrencyLimit: 1 },
-  machine: "small-2x",
-  maxDuration: 300,
-  retry: {
-    maxAttempts: 3,
-    factor: 2,
-    minTimeoutInMs: 30_000,
-    maxTimeoutInMs: 300_000,
-    randomize: true,
-  },
-  run: async (payload: { janela: Janela; tipo?: TipoColeta }) => {
-    const cpf = process.env.INDEA_CPF;
-    const senha = process.env.INDEA_SENHA;
-    // Credencial ausente nunca melhora com retry.
-    if (!cpf || !senha) throw new AbortTaskRunError("INDEA_CPF/INDEA_SENHA ausentes");
-
-    const coletaId = await abrirColeta({ uf: "MT", tipo: payload.tipo ?? "diaria", janela: payload.janela });
-
-    try {
-      const { registros, arquivo, hash, nomeArquivo } = await coletarMt(payload.janela, cpf, senha);
-      await arquivarBruto({ caminho: nomeArquivo, conteudo: arquivo });
-      const gravados = await gravarRegistros(registros, coletaId);
-      await rollupJanela({ uf: "MT", janela: payload.janela, coletaId });
-      await fecharColeta({
-        id: coletaId,
-        status: registros.length > 0 ? "ok" : "sem_dados",
-        arquivoPath: nomeArquivo,
-        arquivoHash: hash,
-        linhasAfetadas: gravados,
-      });
-      logger.info("coletor MT concluído", { gravados });
-      return { uf: "MT" as const, registros: registros.length, gravados };
-    } catch (erro) {
-      const mensagem = erro instanceof Error ? erro.message : String(erro);
-      await fecharColeta({ id: coletaId, status: "falha", erro: mensagem });
-      // Credencial rejeitada também não melhora com retry.
-      if (erro instanceof CredencialInvalidaError) throw new AbortTaskRunError(mensagem);
-      throw erro;
-    }
-  },
-});
-```
-
-Adicione ao batch em `src/trigger/coleta-diaria.ts`, junto com `{ task: coletorMt, payload: { janela } }` e `"MT"` em `ufs`.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add src/coletores/mt.ts src/trigger/coletor-mt.ts src/trigger/coleta-diaria.ts tests/coletores/mt.test.ts tests/fixtures/mt-indea-*
-git commit -m "feat: coletor do MT com sessão autenticada e erros não-retentáveis"
-```
-
----
+**Pendente de credencial em produção:** cadastrar `INDEA_CPF`/`INDEA_SENHA` no ambiente do Trigger.dev (Task 17). O CHECK de `abate_mensal.fonte` na migration da Task 2 já inclui `gta_condensada`.
 
 ## Task 14: Coletor do RO (IDARON)
 
@@ -3317,7 +3021,7 @@ export const coletorRo = task({
       }
 
       const agregados = await coletarRo({ ano: payload.ano, mes: payload.mes, chaveRecurso: chave });
-      await gravarAgregados(agregados, coletaId);
+      await gravarAgregados(agregados, coletaId, "powerbi");
       await fecharColeta({ id: coletaId, status: "ok", linhasAfetadas: agregados.length });
 
       return { uf: "RO" as const, agregados: agregados.length };
@@ -3368,10 +3072,11 @@ GTAs são lançadas com atraso: o total de ontem muda depois de ontem. Sem a rej
 
 `src/trigger/rejanela-semanal.ts`:
 
+**Só o MS precisa de rejanela per-day.** MS é detalhe por GTA e o total do dia muda depois. MT e RO são agregados por competência que já ressomam o mês inteiro em cada execução diária (o MT reconsulta do 1º dia até hoje; o RO relê o mês), então não têm nada a rejanelar. O PA é mensal fechado.
+
 ```ts
 import { logger, schedules } from "@trigger.dev/sdk";
 import { coletorMs } from "./coletor-ms.js";
-import { coletorMt } from "./coletor-mt.js";
 import { alertarOperador } from "../notificacao/alertas.js";
 
 const DIAS_REJANELA = 10;
@@ -3396,15 +3101,14 @@ export const rejanelaSemanal = schedules.task({
     }));
 
     const ms = await coletorMs.batchTriggerAndWait(lotes);
-    const mt = await coletorMt.batchTriggerAndWait(lotes);
 
-    const falhas = [...ms.runs, ...mt.runs].filter((r) => !r.ok).length;
+    const falhas = ms.runs.filter((r) => !r.ok).length;
     logger.info("rejanela concluída", { dias: DIAS_REJANELA, falhas });
 
     if (falhas > 0) {
       await alertarOperador(
         "Rejanela semanal com falhas",
-        `${falhas} de ${lotes.length * 2} execuções falharam nos últimos ${DIAS_REJANELA} dias.`,
+        `${falhas} de ${lotes.length} execuções (MS) falharam nos últimos ${DIAS_REJANELA} dias.`,
       );
     }
     return { dias: DIAS_REJANELA, falhas };

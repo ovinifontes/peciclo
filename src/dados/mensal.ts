@@ -42,10 +42,15 @@ export async function rollupJanela(args: {
   return alteradas;
 }
 
-/** Grava um agregado que já vem pronto da fonte (caso do RO). */
+/**
+ * Grava um agregado que já vem pronto da fonte. Sobrescreve por competência.
+ * RO usa fonte "powerbi" (Power BI); MT usa "gta_condensada" (o relatório GTA
+ * Condensado do INDEA já vem somado por mês, não por GTA).
+ */
 export async function gravarAgregados(
   agregados: AgregadoMensal[],
   coletaId: number,
+  fonte: "powerbi" | "gta_condensada",
 ): Promise<void> {
   if (agregados.length === 0) return;
   const { error } = await obterCliente()
@@ -58,7 +63,7 @@ export async function gravarAgregados(
         finalidade: a.finalidade,
         sexo: a.sexo,
         quantidade: a.quantidade,
-        fonte: "powerbi",
+        fonte,
         coleta_id: coletaId,
         atualizado_em: new Date().toISOString(),
       })),

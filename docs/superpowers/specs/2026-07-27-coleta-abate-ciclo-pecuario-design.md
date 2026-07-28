@@ -78,7 +78,7 @@ Chave natural única: `(uf, documento_numero, documento_serie, sexo, faixa_etari
 
 Índices: `(uf, data_emissao, finalidade)` para os rollups.
 
-Aplica-se a MT, MS e PA. Rondônia não tem esse nível de detalhe.
+Aplica-se apenas a MS e PA (os únicos que publicam detalhe por GTA). MT e RO são agregados por competência e gravam direto em `abate_mensal`.
 
 ### `abate_mensal` — a tabela canônica
 
@@ -86,7 +86,7 @@ Chave primária: `(uf, ano, mes, finalidade, sexo)`. Campos: `quantidade`, `font
 
 A finalidade faz parte da chave para que o rollup de engorda e reprodução conviva com o de abate sem sobrescrevê-lo. O gerador de planilha filtra `finalidade = 'ABATE'`; as demais ficam disponíveis para a fase 2.
 
-Valores de `fonte`: `gta_agregada` (MT, MS, PA — calculada de `gta_registros`), `powerbi` (RO — número direto do relatório, disponível apenas para `ABATE`), `manual` (semente histórica da planilha do sócio).
+Valores de `fonte`: `gta_agregada` (MS e PA — calculada de `gta_registros`), `gta_condensada` (MT — o relatório GTA Condensado do INDEA já vem somado por mês), `powerbi` (RO — número direto do relatório, disponível apenas para `ABATE`), `manual` (semente histórica da planilha do sócio).
 
 O gerador de planilha lê **apenas esta tabela**, e por isso não precisa saber que os portais têm granularidades diferentes.
 
@@ -131,17 +131,25 @@ Amostra verificada (20 a 26/07/2026, bovino, finalidade ABATE): fêmea 29.991, m
 
 ### MT — INDEA 🟡
 
-Java/Struts2 com login, atrás de WAF F5, páginas em **ISO-8859-1**.
+Java/Struts2 com login, atrás de WAF F5. **Mapeado em sessão autenticada (28/07/2026); os fatos abaixo são observados, não inferidos.**
 
 1. `GET /FronteiraWeb/` — semeia cookies (JSESSIONID + BIG-IP + WAF)
-2. `POST /FronteiraWeb/Login.action` com `usuario=<CPF>` e `senha=<senha>` (variáveis de ambiente)
-3. `GET /FronteiraWeb/exportar_gta_condensado_input.action`
-4. Submeter o export com data inicial e final
-5. Parsear o arquivo em ISO-8859-1, filtrar bovino, desnormalizar por sexo
+2. `POST /FronteiraWeb/Login.action` com `usuario=<CPF>` e `senha=<senha>` (form clássico, sem captcha nem CSRF)
+3. `POST /FronteiraWeb/exportar_gta_condensado.action` com **multipart/form-data**, campos `dataIni` e `dataFim` no formato `dd/MM/yyyy`
+4. Filtrar bovino + abate, somar por sexo
 
-Se a resposta for a tela de login, a sessão expirou: refazer o login e tentar uma vez.
+Se a resposta for a tela de login (HTML em vez de XLSX), a sessão caiu: tratar como falha e realertar.
 
-**Pré-requisito de implementação:** o nome exato da action de export, os parâmetros de data e o formato do arquivo só são observáveis dentro de uma sessão autenticada. O primeiro passo do coletor do MT é uma sessão única de mapeamento — logar, salvar o HTML do formulário, e escrever o código em cima do que foi observado. Autorizado pelo dono da credencial.
+**Correção importante ao modelo de dados — o MT é agregado, não detalhe.** O relatório se chama "GTA **Condensado**" e é exatamente isso: já vem somado. Colunas: `UF ORIGEM | MUNICÍPIO ORIGEM | UF DESTINO | MUNICÍPIO DESTINO | MÊS | ESPÉCIE | FINALIDADE | FAIXA ETÁRIA | SEXO | QNT`. **Não há número de GTA, série nem data de emissão** — só o mês (`MM/YYYY`) e a quantidade já agregada.
+
+Consequências:
+- O MT **não entra em `gta_registros`** (não há chave de GTA). Grava direto em `abate_mensal`, como o RO, com **`fonte = 'gta_condensada'`**.
+- Verificado que uma consulta por intervalo **soma o intervalo inteiro** (dia 20 + dia 21 = intervalo 20–21, exato). Então a coleta diária consulta do 1º dia do mês até hoje e sobrescreve o total do mês — reconsultar captura GTAs atrasadas sem rejanela separada.
+- `SEXO` vem como `M`/`F` (e `A` sem sexo, ignorado). `FINALIDADE` tem `ABATE` exato e também `RETORNO DE ABATEDOURO` — igualdade exata, nunca prefixo.
+- O arquivo é XLSX (UTF-8 interno); o `ISO-8859-1` do content-type HTTP é irrelevante — **não precisa de decode**.
+- A riqueza por município/faixa fica preservada no arquivo bruto arquivado, para a fase 2 se necessário.
+
+**Validação (arquivo real de 20/07/2026):** bovino + abate = fêmea 11.365, macho 14.930.
 
 **Limites:** 1 login por dia, User-Agent identificável, sem paralelismo — é um portal público de governo atrás de WAF.
 
