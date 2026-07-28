@@ -2,7 +2,9 @@ import { defineConfig } from "@trigger.dev/sdk";
 import { playwright } from "@trigger.dev/build/extensions/playwright";
 
 export default defineConfig({
-  project: process.env.TRIGGER_PROJECT_REF!,
+  // Ref do projeto no Trigger.dev. Fixo aqui (não é segredo) para o deploy via
+  // GitHub encontrá-lo sem depender de variável de ambiente no build.
+  project: "proj_xfpkwsjmqadhzfdcndsx",
   runtime: "node-22",
   dirs: ["./src/trigger"],
   logLevel: "info",
