@@ -50,15 +50,44 @@ export async function encontrarPastaDoAno(
   return alvo?.id ?? null;
 }
 
-export async function baixarArquivoDrive(id: string): Promise<Buffer> {
-  const resposta = await fetch(`https://drive.google.com/uc?export=download&id=${id}`, {
-    redirect: "follow",
-    signal: AbortSignal.timeout(300_000),
-  });
-  if (!resposta.ok) throw new Error(`Download do Drive falhou: HTTP ${resposta.status}`);
+const ehZip = (b: Buffer) => b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b;
 
-  const buffer = Buffer.from(await resposta.arrayBuffer());
-  if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+/**
+ * Extrai a URL de confirmação da página "Virus scan warning" que o Drive
+ * devolve para arquivos grandes (>~100 MB) em vez do conteúdo. A página traz um
+ * formulário com id/export/confirm/uuid que precisa ser reenviado.
+ */
+export function urlDeConfirmacao(html: string): string | null {
+  const action = html.match(/<form[^>]+action="([^"]+)"/)?.[1];
+  if (!action) return null;
+  const params = new URLSearchParams();
+  for (const campo of html.matchAll(/<input[^>]+type="hidden"[^>]+name="([^"]+)"[^>]+value="([^"]*)"/g)) {
+    params.set(campo[1]!, campo[2]!);
+  }
+  if (!params.has("id")) return null;
+  return `${action.replace(/&amp;/g, "&")}?${params.toString()}`;
+}
+
+export async function baixarArquivoDrive(id: string): Promise<Buffer> {
+  const baixar = (url: string) =>
+    fetch(url, { redirect: "follow", signal: AbortSignal.timeout(600_000) });
+
+  let resposta = await baixar(`https://drive.google.com/uc?export=download&id=${id}`);
+  if (!resposta.ok) throw new Error(`Download do Drive falhou: HTTP ${resposta.status}`);
+  let buffer = Buffer.from(await resposta.arrayBuffer());
+
+  // Arquivos grandes vêm como página de aviso de vírus: reenviar confirmando.
+  if (!ehZip(buffer)) {
+    const url = urlDeConfirmacao(buffer.toString("utf8"));
+    if (!url) {
+      throw new Error(`Drive devolveu conteúdo que não é XLSX (${buffer.length} bytes)`);
+    }
+    resposta = await baixar(url);
+    if (!resposta.ok) throw new Error(`Download confirmado falhou: HTTP ${resposta.status}`);
+    buffer = Buffer.from(await resposta.arrayBuffer());
+  }
+
+  if (!ehZip(buffer)) {
     throw new Error(`Drive devolveu conteúdo que não é XLSX (${buffer.length} bytes)`);
   }
   return buffer;

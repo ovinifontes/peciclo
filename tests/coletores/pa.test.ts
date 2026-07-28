@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interpretarCategoria, parsearPa } from "../../src/coletores/pa.js";
+import { interpretarCategoria, parsearPa, urlDeConfirmacao } from "../../src/coletores/pa.js";
 
 describe("interpretarCategoria", () => {
   it("separa espécie, sexo e faixa etária do rótulo da coluna", () => {
@@ -46,5 +46,29 @@ describe("parsearPa", () => {
       expect(r.dataEmissao).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(r.quantidade).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("urlDeConfirmacao", () => {
+  // Página real que o Drive devolve para arquivos >~100 MB.
+  const aviso = `<form id="download-form" action="https://drive.usercontent.google.com/download" method="get">
+    <input type="submit" id="uc-download-link" value="Download anyway"/>
+    <input type="hidden" name="id" value="1vuaU22DNiVZijCVGaEhT4aqJewC6QBbR">
+    <input type="hidden" name="export" value="download">
+    <input type="hidden" name="confirm" value="t">
+    <input type="hidden" name="uuid" value="3bc169c5-3f23-4c12-8f49-00a6033ccbda">
+  </form>`;
+
+  it("monta a URL de confirmação com todos os campos do formulário", () => {
+    const url = urlDeConfirmacao(aviso)!;
+    expect(url.startsWith("https://drive.usercontent.google.com/download?")).toBe(true);
+    const p = new URL(url).searchParams;
+    expect(p.get("id")).toBe("1vuaU22DNiVZijCVGaEhT4aqJewC6QBbR");
+    expect(p.get("confirm")).toBe("t");
+    expect(p.get("uuid")).toBe("3bc169c5-3f23-4c12-8f49-00a6033ccbda");
+  });
+
+  it("devolve null quando não é a página de aviso", () => {
+    expect(urlDeConfirmacao("<html><body>qualquer coisa</body></html>")).toBeNull();
   });
 });
