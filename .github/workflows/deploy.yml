@@ -1,0 +1,35 @@
+name: Deploy no Trigger.dev (prod)
+
+# Deploy automático a cada push na main.
+# Requer o secret TRIGGER_ACCESS_TOKEN no repositório
+# (Settings → Secrets and variables → Actions).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # permite disparar manualmente pela aba Actions
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Um deploy que quebra os testes não deve ir para produção.
+      - name: Rodar testes
+        run: npm test
+
+      - name: Checar tipos
+        run: npm run typecheck
+
+      - name: Deploy
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+        run: npx trigger.dev@latest deploy
