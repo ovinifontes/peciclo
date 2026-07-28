@@ -56,7 +56,24 @@ No dashboard, dispare `coleta-diaria` manualmente.
 | `WHATSAPP_DESTINATARIOS` | Números DDI+DDD+numero, separados por vírgula |
 | `WHATSAPP_OPERADOR` | Número que recebe os alertas técnicos |
 | `INDEA_CPF`, `INDEA_SENHA` | Credencial do INDEA (MT) |
-| `GOOGLE_API_KEY` | Google Cloud → API key com Drive API v3 habilitada |
+| `GOOGLE_API_KEY` | Google Cloud → API key com Drive API v3 habilitada (passo a passo abaixo) |
+
+### Como obter a `GOOGLE_API_KEY`
+
+O coletor do PA lista uma pasta **pública** do Google Drive, então basta uma API
+key simples (sem OAuth, sem conta de serviço).
+
+1. Acesse https://console.cloud.google.com e faça login.
+2. No topo, crie um projeto (ex.: "peciclo") ou selecione um existente.
+3. Menu **APIs e serviços → Biblioteca**. Busque **Google Drive API** e clique em **Ativar**.
+4. Menu **APIs e serviços → Credenciais → Criar credenciais → Chave de API**.
+5. Copie a chave gerada e cole em `GOOGLE_API_KEY` no `.env`.
+6. **Restrinja a chave** (recomendado): clique nela → em "Restrições de API", marque
+   **Restringir chave** e selecione só a **Google Drive API**. Salve. Isso limita o
+   estrago caso a chave vaze.
+
+Não é preciso ativar faturamento — a Drive API tem cota gratuita folgada para uma
+listagem por dia.
 
 ## Pendências antes de ir para produção
 
