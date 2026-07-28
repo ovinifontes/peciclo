@@ -2801,14 +2801,24 @@ A sessão autenticada revelou que o relatório do INDEA se chama "GTA **Condensa
 
 **Pendente de credencial em produção:** cadastrar `INDEA_CPF`/`INDEA_SENHA` no ambiente do Trigger.dev (Task 17). O CHECK de `abate_mensal.fonte` na migration da Task 2 já inclui `gta_condensada`.
 
-## Task 14: Coletor do RO (IDARON)
+## Task 14: Coletor do RO (IDARON) — PARCIAL (bloqueada por rede)
 
 O dado vem de um Power BI publicado na web. A estratégia usa o browser **só na descoberta** e HTTP puro em produção.
 
+**⚠️ Bloqueio de ambiente:** o cluster `*.analysis.windows.net` (onde vive o endpoint `querydata`) é **inacessível da máquina de desenvolvimento** (TLS reset, HTTP 000 — confirmado). Sem alcançá-lo não dá para capturar a query real nem uma resposta para calibrar o parser. Por isso o RO ficou **implementado em scaffold, mas não finalizado nem ligado ao batch diário**. A finalização (rodar `scripts/descobrir-consulta-ro.ts`, colar o corpo em `montarConsulta`, validar `parsearRespostaPowerBi` contra a resposta real, e então ligar `coletorRo` ao batch) precisa acontecer no ambiente de deploy do Trigger.dev ou numa rede sem o bloqueio.
+
+**O que já foi implementado e commitado:**
+- `src/coletores/ro.ts` — `extrairChaveRecurso` (decodifica o `r=`, testado), `descobrirRelatorio` (relê o link na página do IDARON, acessível), `parsearRespostaPowerBi` (walk do DSR, testado contra fixture sintético), e `coletarRo`/`montarConsulta` que lançam `ConsultaNaoConfiguradaError` até a captura.
+- `src/trigger/coletor-ro.ts` — task pronta, **fora do batch** (ligar após captura, senão alertaria todo dia).
+- `scripts/descobrir-consulta-ro.ts` — captura via Playwright.
+- `tests/coletores/ro.test.ts` — 5 testes puros (decodificação da chave + parser DSR).
+
+Enquanto não finalizado, a planilha mostra o RO com os meses históricos da semente (`fonte = manual`); só o mês corrente do RO fica vazio.
+
+**Passos de finalização (rodar no ambiente com acesso ao cluster):**
+
 **Files:**
-- Create: `src/coletores/ro.ts`, `src/trigger/coletor-ro.ts`, `tests/coletores/ro.test.ts`
-- Create: `scripts/descobrir-consulta-ro.ts`
-- Modify: `src/trigger/coleta-diaria.ts`
+- Modify: `src/coletores/ro.ts` (preencher `montarConsulta`), `src/trigger/coleta-diaria.ts` (ligar `coletorRo` ao batch)
 
 - [ ] **Step 1: Escrever o script de descoberta**
 
