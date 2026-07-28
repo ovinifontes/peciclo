@@ -61,7 +61,7 @@ export async function lerCsvHistorico(caminho: string): Promise<LinhaHistorico[]
 export async function semearHistorico(caminho: string): Promise<number> {
   const linhas = await lerCsvHistorico(caminho);
   const { error } = await obterCliente()
-    .from("abate_mensal")
+    .from("peciclo_abate_mensal")
     .upsert(
       linhas.map((l) => ({
         uf: l.uf,

@@ -504,9 +504,9 @@ No SQL Editor do dashboard:
 select c.relname, c.relrowsecurity,
        (select count(*) from pg_policies p where p.schemaname='public' and p.tablename=c.relname) as policies
 from pg_class c join pg_namespace n on n.oid=c.relnamespace
-where n.nspname='public' and c.relname in ('coletas','gta_registros','abate_mensal');
+where n.nspname='public' and c.relname in ('peciclo_coletas','peciclo_gta_registros','peciclo_abate_mensal');
 
-insert into storage.buckets (id, name, public) values ('brutos', 'brutos', false)
+insert into storage.buckets (id, name, public) values ('peciclo_brutos', 'peciclo_brutos', false)
 on conflict (id) do nothing;
 ```
 

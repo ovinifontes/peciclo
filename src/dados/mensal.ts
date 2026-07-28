@@ -31,7 +31,7 @@ export async function rollupJanela(args: {
   let alteradas = 0;
 
   for (const competencia of competenciasDaJanela(args.janela)) {
-    const { data, error } = await cliente.rpc("rollup_abate_mensal", {
+    const { data, error } = await cliente.rpc("peciclo_rollup_abate_mensal", {
       p_uf: args.uf,
       p_competencia: competencia,
       p_coleta_id: args.coletaId,
@@ -54,7 +54,7 @@ export async function gravarAgregados(
 ): Promise<void> {
   if (agregados.length === 0) return;
   const { error } = await obterCliente()
-    .from("abate_mensal")
+    .from("peciclo_abate_mensal")
     .upsert(
       agregados.map((a) => ({
         uf: a.uf,
@@ -83,7 +83,7 @@ export interface LinhaMensal {
 /** Lê o abate mensal que alimenta a planilha. Igualdade exata em ABATE. */
 export async function lerAbateMensal(): Promise<LinhaMensal[]> {
   const { data, error } = await obterCliente()
-    .from("abate_mensal")
+    .from("peciclo_abate_mensal")
     .select("uf, ano, mes, sexo, quantidade")
     // Igualdade exata, nunca prefixo: "ABATE SANITÁRIO" e "SACRIFÍCIO" são
     // abate por determinação sanitária, não decisão econômica do pecuarista.

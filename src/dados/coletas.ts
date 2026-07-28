@@ -7,7 +7,7 @@ export async function abrirColeta(args: {
   janela: Janela;
 }): Promise<number> {
   const { data, error } = await obterCliente()
-    .from("coletas")
+    .from("peciclo_coletas")
     .insert({
       uf: args.uf,
       tipo: args.tipo,
@@ -31,7 +31,7 @@ export async function fecharColeta(args: {
   erro?: string | null;
 }): Promise<void> {
   const { error } = await obterCliente()
-    .from("coletas")
+    .from("peciclo_coletas")
     .update({
       status: args.status,
       arquivo_path: args.arquivoPath ?? null,
@@ -48,7 +48,7 @@ export async function fecharColeta(args: {
 /** Hashes de arquivos já processados com sucesso — usado pelo coletor do PA. */
 export async function hashesProcessados(uf: UF): Promise<Set<string>> {
   const { data, error } = await obterCliente()
-    .from("coletas")
+    .from("peciclo_coletas")
     .select("arquivo_hash")
     .eq("uf", uf)
     .eq("status", "ok")

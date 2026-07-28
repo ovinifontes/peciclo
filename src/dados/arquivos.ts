@@ -1,6 +1,6 @@
 import { obterCliente } from "./cliente.js";
 
-const BUCKET = "brutos";
+const BUCKET = "peciclo_brutos";
 
 /**
  * Arquiva o arquivo bruto antes de qualquer parse. Um parser com bug pode ser

@@ -55,7 +55,7 @@ export async function gravarRegistros(
     }));
 
     const { error } = await cliente
-      .from("gta_registros")
+      .from("peciclo_gta_registros")
       .upsert(lote, { onConflict: "uf,documento_numero,documento_serie,sexo,faixa_etaria" });
 
     if (error) throw new Error(`Falha ao gravar registros: ${error.message}`);
