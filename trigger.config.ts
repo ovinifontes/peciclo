@@ -22,6 +22,8 @@ export default defineConfig({
   },
   build: {
     external: ["playwright"],
-    extensions: [playwright({ browsers: ["chromium"], headless: true })],
+    // version fixada: no deploy via npx a auto-detecção da versão falha.
+    // Deve casar com a versão de playwright no package.json.
+    extensions: [playwright({ browsers: ["chromium"], headless: true, version: "1.56.0" })],
   },
 });
