@@ -34,12 +34,64 @@ export class RespostaInesperadaError extends Error {
   }
 }
 
+/** Descreve a causa real por trás do genérico "fetch failed" do undici. */
+function descreverCausa(erro: unknown): string {
+  if (erro instanceof Error) {
+    const causa = (erro as { cause?: unknown }).cause as
+      | { code?: string; message?: string; name?: string }
+      | undefined;
+    if (causa) return `${causa.code ?? causa.name ?? ""} ${causa.message ?? ""}`.trim();
+    return `${erro.name}: ${erro.message}`;
+  }
+  return String(erro);
+}
+
+/**
+ * Monta a requisição do relatório. O `api.ms.gov.br` bloqueia IPs estrangeiros
+ * (datacenter dos EUA), então em produção passamos por uma Edge Function do
+ * Supabase (IP brasileiro), configurada em `MS_PROXY_URL`. No dev local, com o
+ * IP brasileiro da máquina, vai direto.
+ */
+function requisicaoMs(janela: Janela): { url: string; headers: Record<string, string> } {
+  const proxyUrl = process.env.MS_PROXY_URL;
+  const proxySecret = process.env.MS_PROXY_SECRET;
+  if (proxyUrl && proxySecret) {
+    const u = new URL(proxyUrl);
+    u.searchParams.set("inicio", janela.inicio);
+    u.searchParams.set("fim", janela.fim);
+    return { url: u.toString(), headers: { "x-proxy-secret": proxySecret } };
+  }
+  return {
+    url: urlRelatorioMs(janela),
+    headers: { "user-agent": USER_AGENT, "accept-encoding": "gzip, deflate", accept: "*/*" },
+  };
+}
+
+/**
+ * Faz o GET do relatório com tentativas. O endpoint do IAGRO é lento (~10 s) e
+ * instável; retentar com espera contorna quedas transitórias e revela a causa
+ * real se persistir.
+ */
+async function buscarComTentativas(janela: Janela, signal?: AbortSignal): Promise<Response> {
+  const { url, headers } = requisicaoMs(janela);
+  const tentativas = 4;
+  let ultimoErro: unknown;
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      return await fetch(url, { headers, signal: signal ?? AbortSignal.timeout(180_000) });
+    } catch (erro) {
+      ultimoErro = erro;
+      if (i < tentativas) await new Promise((r) => setTimeout(r, i * 5000));
+    }
+  }
+  throw new RespostaInesperadaError(
+    `IAGRO inacessível após ${tentativas} tentativas — causa: ${descreverCausa(ultimoErro)}`,
+  );
+}
+
 /** Baixa o relatório e devolve o buffer, validando que é mesmo um XLSX. */
 export async function baixarMs(janela: Janela, signal?: AbortSignal): Promise<Buffer> {
-  const resposta = await fetch(urlRelatorioMs(janela), {
-    headers: { "user-agent": USER_AGENT, "accept-encoding": "gzip, deflate" },
-    signal: signal ?? AbortSignal.timeout(120_000),
-  });
+  const resposta = await buscarComTentativas(janela, signal);
 
   if (!resposta.ok) {
     throw new RespostaInesperadaError(`IAGRO respondeu HTTP ${resposta.status}`);
