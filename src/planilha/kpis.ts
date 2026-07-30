@@ -17,6 +17,13 @@ export interface Kpi {
   variacaoAnoAnteriorPp: number | null;
   /** Média móvel de 12 meses da participação; null antes de 12 observações. */
   mediaMovel12m: number | null;
+  /**
+   * Quantos estados entraram nesta linha. No consolidado, um mês com menos de
+   * 4 não é comparável com os demais: se falta um estado com participação de
+   * fêmeas atípica (o PA, por exemplo), o percentual desloca sem que o mercado
+   * tenha mudado. Fica explícito em vez de virar uma leitura falsa do ciclo.
+   */
+  estados: number;
 }
 
 export function participacaoFemeas(femeas: number, machos: number): number | null {
@@ -25,23 +32,24 @@ export function participacaoFemeas(femeas: number, machos: number): number | nul
 }
 
 export function calcularKpis(dados: LinhaMensal[]): Kpi[] {
-  const acumulado = new Map<string, { femeas: number; machos: number }>();
+  const acumulado = new Map<string, { femeas: number; machos: number; ufs: Set<string> }>();
 
-  const somar = (escopo: EscopoKpi, ano: number, mes: number, sexo: string, qtd: number) => {
+  const somar = (escopo: EscopoKpi, ano: number, mes: number, sexo: string, qtd: number, uf: string) => {
     const chave = `${escopo}|${ano}|${mes}`;
-    const atual = acumulado.get(chave) ?? { femeas: 0, machos: 0 };
+    const atual = acumulado.get(chave) ?? { femeas: 0, machos: 0, ufs: new Set<string>() };
     if (sexo === "FEMEA") atual.femeas += qtd;
     else atual.machos += qtd;
+    atual.ufs.add(uf);
     acumulado.set(chave, atual);
   };
 
   for (const d of dados) {
-    somar(d.uf, d.ano, d.mes, d.sexo, d.quantidade);
-    somar("CONSOLIDADO", d.ano, d.mes, d.sexo, d.quantidade);
+    somar(d.uf, d.ano, d.mes, d.sexo, d.quantidade, d.uf);
+    somar("CONSOLIDADO", d.ano, d.mes, d.sexo, d.quantidade, d.uf);
   }
 
   const kpis: Kpi[] = [...acumulado.entries()]
-    .map(([chave, { femeas, machos }]) => {
+    .map(([chave, { femeas, machos, ufs }]) => {
       const [uf, ano, mes] = chave.split("|");
       return {
         uf: uf as EscopoKpi,
@@ -54,6 +62,7 @@ export function calcularKpis(dados: LinhaMensal[]): Kpi[] {
         variacaoMesAnteriorPp: null as number | null,
         variacaoAnoAnteriorPp: null as number | null,
         mediaMovel12m: null as number | null,
+        estados: ufs.size,
       };
     })
     .sort((a, b) => a.uf.localeCompare(b.uf) || a.ano - b.ano || a.mes - b.mes);

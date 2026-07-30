@@ -112,6 +112,7 @@ export function escreverAbaCiclo(planilha: ExcelJS.Workbook, kpis: Kpi[]): void 
   aba.addRow([
     "Estado", "Ano", "Mês", "Fêmeas", "Machos", "Total",
     "% Fêmeas", "Var. mês anterior (p.p.)", "Var. ano anterior (p.p.)", "Média móvel 12m",
+    "Estados no cálculo",
   ]);
   aba.getRow(1).font = { bold: true };
 
@@ -131,6 +132,10 @@ export function escreverAbaCiclo(planilha: ExcelJS.Workbook, kpis: Kpi[]): void 
       k.variacaoMesAnteriorPp,
       k.variacaoAnoAnteriorPp,
       k.mediaMovel12m,
+      // No consolidado, menos de 4 estados significa que o mês não é
+      // comparável com os demais — a ausência de um estado desloca o
+      // percentual sem que o mercado tenha mudado.
+      k.uf === "CONSOLIDADO" ? `${k.estados} de 4` : "—",
     ]);
   }
 
@@ -140,6 +145,7 @@ export function escreverAbaCiclo(planilha: ExcelJS.Workbook, kpis: Kpi[]): void 
     aba.getColumn(c).numFmt = "0.0%";
     aba.getColumn(c).width = 22;
   }
+  aba.getColumn(11).width = 18;
 }
 
 /** Monta a planilha completa a partir do banco. */

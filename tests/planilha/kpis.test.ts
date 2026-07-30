@@ -45,3 +45,23 @@ describe("calcularKpis", () => {
     expect(maioMt.variacaoAnoAnteriorPp).toBeNull();
   });
 });
+
+describe("contagem de estados no consolidado", () => {
+  it("marca quantos estados entraram em cada mês", () => {
+    const dados: LinhaMensal[] = [
+      { uf: "MT", ano: 2025, mes: 11, sexo: "FEMEA", quantidade: 100 },
+      { uf: "MT", ano: 2025, mes: 11, sexo: "MACHO", quantidade: 100 },
+      { uf: "MS", ano: 2025, mes: 11, sexo: "FEMEA", quantidade: 100 },
+      { uf: "MS", ano: 2025, mes: 11, sexo: "MACHO", quantidade: 100 },
+      // dezembro tem os 3
+      { uf: "MT", ano: 2025, mes: 12, sexo: "FEMEA", quantidade: 100 },
+      { uf: "MS", ano: 2025, mes: 12, sexo: "FEMEA", quantidade: 100 },
+      { uf: "PA", ano: 2025, mes: 12, sexo: "FEMEA", quantidade: 100 },
+    ];
+    const kpis = calcularKpis(dados);
+    expect(kpis.find((k) => k.uf === "CONSOLIDADO" && k.mes === 11)!.estados).toBe(2);
+    expect(kpis.find((k) => k.uf === "CONSOLIDADO" && k.mes === 12)!.estados).toBe(3);
+    // uma linha de estado individual sempre conta 1
+    expect(kpis.find((k) => k.uf === "MT" && k.mes === 11)!.estados).toBe(1);
+  });
+});
