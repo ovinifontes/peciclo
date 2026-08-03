@@ -37,3 +37,27 @@ describe("detectarAnomalias", () => {
     expect(detectarAnomalias(curta)).toEqual([]);
   });
 });
+
+describe("ignora o mês corrente (em andamento)", () => {
+  function serie(ultimoMes: number, ultimaQtd: number): LinhaMensal[] {
+    const linhas: LinhaMensal[] = [];
+    for (let mes = 1; mes <= ultimoMes - 1; mes++) {
+      linhas.push({ uf: "MS", ano: 2026, mes, sexo: "FEMEA", quantidade: 170_000 });
+    }
+    linhas.push({ uf: "MS", ano: 2026, mes: ultimoMes, sexo: "FEMEA", quantidade: ultimaQtd });
+    return linhas;
+  }
+
+  it("não alerta sobre o mês corrente mesmo com valor baixíssimo (parcial)", () => {
+    // ago/2026 com 1.874 (dia 3 do mês) não deve gerar alerta se ago é o mês corrente
+    const anomalias = detectarAnomalias(serie(8, 1_874), { ano: 2026, mes: 8 });
+    expect(anomalias).toEqual([]);
+  });
+
+  it("ainda alerta sobre um mês FECHADO anômalo", () => {
+    // se julho (fechado) estiver quebrado e agosto é o corrente, julho é avaliado
+    const anomalias = detectarAnomalias(serie(8, 1_874), { ano: 2026, mes: 9 });
+    expect(anomalias).toHaveLength(1);
+    expect(anomalias[0]!.mes).toBe(8);
+  });
+})

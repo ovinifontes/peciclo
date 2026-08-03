@@ -16,7 +16,12 @@ export const gerarEEnviar = task({
     const arquivo = await gerarPlanilha();
 
     // Alerta, nunca bloqueia: a planilha vai de qualquer forma.
-    const anomalias = detectarAnomalias(await lerAbateMensal());
+    // dataReferencia = "AAAA-MM-DD" de hoje; o mês dela é o mês em andamento.
+    const competenciaAtual = {
+      ano: Number(payload.dataReferencia.slice(0, 4)),
+      mes: Number(payload.dataReferencia.slice(5, 7)),
+    };
+    const anomalias = detectarAnomalias(await lerAbateMensal(), competenciaAtual);
     if (anomalias.length > 0) {
       await alertarOperador(
         `Valores fora do padrão em ${anomalias.length} série(s)`,

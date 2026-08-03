@@ -18,13 +18,25 @@ export interface Anomalia {
 }
 
 /**
- * Compara o mês mais recente de cada série contra a média dos anteriores.
+ * Compara o último mês FECHADO de cada série contra a média dos anteriores.
  * Alerta, nunca bloqueia: uma virada real de ciclo também produz variação
  * grande, e travar o envio por isso seria pior que avisar.
+ *
+ * O mês corrente (`competenciaAtual`) é ignorado: ele está sendo somado dia a
+ * dia, então comparar um mês parcial com médias de meses fechados sempre daria
+ * "muito abaixo" — ruído, não anomalia. Avaliamos o mês fechado mais recente,
+ * que é onde um coletor quebrado apareceria de verdade.
  */
-export function detectarAnomalias(dados: LinhaMensal[]): Anomalia[] {
+export function detectarAnomalias(
+  dados: LinhaMensal[],
+  competenciaAtual?: { ano: number; mes: number },
+): Anomalia[] {
+  const ehCorrente = (l: LinhaMensal) =>
+    competenciaAtual && l.ano === competenciaAtual.ano && l.mes === competenciaAtual.mes;
+
   const series = new Map<string, LinhaMensal[]>();
   for (const linha of dados) {
+    if (ehCorrente(linha)) continue; // mês em andamento não é anomalia
     const chave = `${linha.uf}|${linha.sexo}`;
     const lista = series.get(chave) ?? [];
     lista.push(linha);
