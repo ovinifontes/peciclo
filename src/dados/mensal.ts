@@ -1,5 +1,6 @@
 import type { AgregadoMensal, Janela, UF } from "../tipos.js";
 import { obterCliente } from "./cliente.js";
+import { lerTudo } from "./paginar.js";
 
 /**
  * Lista os primeiros dias de cada mês tocado pela janela.
@@ -82,15 +83,19 @@ export interface LinhaMensal {
 
 /** Lê o abate mensal que alimenta a planilha. Igualdade exata em ABATE. */
 export async function lerAbateMensal(): Promise<LinhaMensal[]> {
-  const { data, error } = await obterCliente()
-    .from("peciclo_abate_mensal")
-    .select("uf, ano, mes, sexo, quantidade")
-    // Igualdade exata, nunca prefixo: "ABATE SANITÁRIO" e "SACRIFÍCIO" são
-    // abate por determinação sanitária, não decisão econômica do pecuarista.
-    .eq("finalidade", "ABATE")
-    .order("ano")
-    .order("mes");
-
-  if (error) throw new Error(`Falha ao ler abate mensal: ${error.message}`);
-  return (data ?? []) as LinhaMensal[];
+  // Paginado: sem isto o Supabase devolve no máximo 1000 linhas sem erro, e
+  // como a ordem é crescente, seriam os meses RECENTES a sumir da planilha.
+  return lerTudo<LinhaMensal>(
+    (de, ate) =>
+      obterCliente()
+        .from("peciclo_abate_mensal")
+        .select("uf, ano, mes, sexo, quantidade")
+        // Igualdade exata, nunca prefixo: "ABATE SANITÁRIO" e "SACRIFÍCIO" são
+        // abate por determinação sanitária, não decisão econômica do pecuarista.
+        .eq("finalidade", "ABATE")
+        .order("ano")
+        .order("mes")
+        .range(de, ate) as never,
+    "abate mensal",
+  );
 }

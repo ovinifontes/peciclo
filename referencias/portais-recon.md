@@ -78,3 +78,22 @@ CSV "Quantitativo de Animais Abatidos por Categoria e UF" com `ANO;MES;UF_PROCED
 ⚠️ **Quebra metodológica importante:** MT/MS/RO/PA usam **GTA** (intenção de abate, na origem) e GO/SP usariam **abate inspecionado SIF** (fato consumado, e só inspeção federal — subestima SP, que tem muito abate estadual/municipal). O *percentual* de fêmeas continua sendo bom proxy, mas o nível absoluto não é comparável. Se entrar na planilha, tem que vir rotulado como fonte diferente.
 
 **Validador independente — IBGE/SIDRA tabela 1092** (API REST pública, sem auth): abate mensal por UF e por tipo de rebanho (bois, vacas, novilhos, novilhas), cobrindo inspeção federal + estadual + municipal. Atraso de 2,5 a 4,5 meses — serve para **auditar trimestralmente** a qualidade da coleta dos 4 estados, não para o dia a dia.
+
+---
+
+## Atualização SP e Goiás (2026-08-03)
+
+Reinvestigação com as pistas do ChatGPT. Conclusão: **nem SP nem GO publicam abate bovino separado por sexo** nas próprias fontes de GTA.
+
+### São Paulo — Defesa Agropecuária (GEDAVE)
+- **Relatórios Bimestrais de GTA** em PDF: https://www.defesa.agricultura.sp.gov.br/www/gta/ (arquivos `gta_<mes>_<mes>_<ano>.pdf`, ~24 MB cada). ⚠️ certificado TLS inválido — exige `curl -k` (o WebFetch recusa).
+- Cada PDF é a **lista completa de GTAs**: nº, data, volume, município origem/destino, **idade** (faixas), espécie (Bovino), **finalidade (Abate)**, unidade. ~28.829 linhas de bovino+abate por bimestre.
+- **NÃO tem sexo para bovino.** A coluna 7 é só idade. Sexo só aparece para galinha. Verificado: 770 menções a fêmea/macho no PDF, todas de Galinha; bovino = 0.
+- Dá para extrair **total de abate bovino por mês** (somando volume), mas não fêmea/macho.
+
+### Goiás — Agrodefesa (SIDAGO / dados abertos)
+- Datasets "Animais Abatidos" e "GTAs Emitidas" (dadosabertos.go.gov.br): ambos são **só total anual por espécie** (2 colunas: `no_especie,total_quantidade`). Sem sexo, sem mês, sem finalidade. Inúteis para o nosso fim.
+
+### Única fonte com sexo para GO/SP: SIGSIF/MAPA (federal)
+- CSV `sigsifquantitativoanimaisabatidoscategoriauf.csv` (dados.agricultura.gov.br): `ANO;MES;UF_PROCEDENCIA;MUNICIPIO;CATEGORIA;QUANTIDADE`, categorias **`Bovino Macho`** e **`Bovino Femea`**, mensal, por UF, série desde ~2001 (88.516 linhas só de GO/SP bovino por sexo). Público, sem login.
+- ⚠️ **Ressalva metodológica:** é abate sob **inspeção FEDERAL (SIF)** — não conta inspeção estadual/municipal, então SUBESTIMA o total (efeito forte em SP). É "fato consumado" (abate), diferente do GTA ("intenção na origem") usado nos 4 estados atuais. O **% de fêmeas** (o sinal do ciclo) é comparável; o nível absoluto não.
