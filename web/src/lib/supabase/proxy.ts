@@ -44,7 +44,10 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const usuario = data?.claims;
 
-  const publica = ["/login", "/auth"].some((p) =>
+  // /conta-inativa é pública porque não mostra dado nenhum: é o recado para
+  // quem não tem acesso. Mandá-la ao login seria pior — uma conta suspensa
+  // que tentasse entrar de novo levaria "e-mail ou senha inválidos".
+  const publica = ["/login", "/auth", "/conta-inativa"].some((p) =>
     request.nextUrl.pathname.startsWith(p),
   );
   if (!usuario && !publica) {
