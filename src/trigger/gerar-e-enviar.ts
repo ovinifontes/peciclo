@@ -6,6 +6,7 @@ import { enviarDocumento, instanciaConectada } from "../notificacao/evolution.js
 import { alertarOperador } from "../notificacao/alertas.js";
 import { detectarAnomalias } from "../planilha/anomalias.js";
 import { lerAbateMensal } from "../dados/mensal.js";
+import { listarTelefonesAtivos, unirDestinatarios } from "../dados/perfis.js";
 
 export const gerarEEnviar = task({
   id: "gerar-e-enviar",
@@ -45,7 +46,17 @@ export const gerarEEnviar = task({
     }
 
     let enviados = 0;
-    for (const numero of cfg.whatsappDestinatarios) {
+    // Clientes ativos do banco ∪ configuração. A configuração fica como rede de
+    // segurança: tabela vazia ou consulta falhando não pode zerar o envio.
+    const doBanco = await listarTelefonesAtivos();
+    const destinatarios = unirDestinatarios(cfg.whatsappDestinatarios, doBanco);
+    logger.info("destinatários resolvidos", {
+      configuracao: cfg.whatsappDestinatarios.length,
+      banco: doBanco.length,
+      total: destinatarios.length,
+    });
+
+    for (const numero of destinatarios) {
       try {
         await enviarDocumento({
           instancia: cfg.evolutionInstancia,

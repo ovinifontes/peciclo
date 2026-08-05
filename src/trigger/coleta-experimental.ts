@@ -7,6 +7,7 @@ import { arquivarBruto } from "../dados/arquivos.js";
 import { enviarDocumento, instanciaConectada } from "../notificacao/evolution.js";
 import { alertarOperador } from "../notificacao/alertas.js";
 import { lerConfig } from "../config.js";
+import { listarTelefonesAtivos, unirDestinatarios } from "../dados/perfis.js";
 import type { Futuro } from "../coletores/precos.js";
 
 /**
@@ -81,12 +82,22 @@ export const coletaExperimental = schedules.task({
     await arquivarBruto({ caminho: `planilhas-completa/${nomeArquivo}`, conteudo: arquivo });
 
     let enviados = 0;
+    // Mesma lista da rotina das 06:00: as duas planilhas são padrão, então um
+    // cliente cadastrado no banco precisa receber as duas.
+    const doBanco = await listarTelefonesAtivos();
+    const destinatarios = unirDestinatarios(cfg.whatsappDestinatarios, doBanco);
+    logger.info("destinatários resolvidos", {
+      configuracao: cfg.whatsappDestinatarios.length,
+      banco: doBanco.length,
+      total: destinatarios.length,
+    });
+
     if (await instanciaConectada({
       instancia: cfg.evolutionInstancia,
       apiKey: cfg.evolutionApiKey,
       baseUrl: cfg.evolutionBaseUrl,
     })) {
-      for (const numero of cfg.whatsappDestinatarios) {
+      for (const numero of destinatarios) {
         try {
           await enviarDocumento({
             instancia: cfg.evolutionInstancia,
