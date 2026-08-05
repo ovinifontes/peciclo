@@ -33,7 +33,13 @@ export const coletaExperimental = schedules.task({
   retry: { maxAttempts: 2 },
   run: async (payload) => {
     const cfg = lerConfig();
-    const dataLocal = payload.timestamp.toLocaleDateString("en-CA", { timeZone: payload.timezone });
+    // O agendamento fornece timestamp/timezone; um disparo manual pelo painel
+    // ou pela API pode vir sem eles — cair para "agora" evita quebrar o teste.
+    // new Date() aceita tanto o Date do agendamento quanto a string ISO que
+    // chega num disparo manual pela API.
+    const quando = payload?.timestamp ? new Date(payload.timestamp) : new Date();
+    const fuso = payload?.timezone ?? "America/Sao_Paulo";
+    const dataLocal = quando.toLocaleDateString("en-CA", { timeZone: fuso });
     const problemas: string[] = [];
 
     // --- GO e SP (SIGSIF federal) ---
