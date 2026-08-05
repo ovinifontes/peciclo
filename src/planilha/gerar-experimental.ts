@@ -11,9 +11,9 @@ const NOMES_MESES = [
 ];
 
 /**
- * Planilha EXPERIMENTAL. Os 4 estados de GTA vêm iguais à planilha de
- * produção; GO e SP entram de fonte diferente (inspeção federal) e ficam
- * rotulados, porque o nível absoluto não é comparável — só a tendência.
+ * Planilha COMPLETA. Os 4 estados de GTA vêm iguais à planilha tradicional;
+ * GO e SP entram de fonte diferente (inspeção federal) e ficam rotulados,
+ * porque o nível absoluto não é comparável — só a tendência.
  */
 const ESTADOS: Array<{ rotulo: string; uf: string; fonte: "gta" | "sif" }> = [
   { rotulo: "Mato Grosso", uf: "MT", fonte: "gta" },
@@ -27,8 +27,8 @@ const ESTADOS: Array<{ rotulo: string; uf: string; fonte: "gta" | "sif" }> = [
 function abaAviso(planilha: ExcelJS.Workbook): void {
   const aba = planilha.addWorksheet("Leia-me");
   const linhas: Array<[string, string]> = [
-    ["O que é esta planilha", "Versão EXPERIMENTAL, separada da planilha oficial. Serve para avaliar se os dados novos (Goiás, São Paulo e preços) agregam valor."],
-    ["MT, MS, RO, PA", "Idênticos à planilha oficial. Fonte: GTA dos órgãos estaduais (INDEA, IAGRO, IDARON, ADEPARA) — intenção de abate registrada na origem."],
+    ["O que é esta planilha", "Versão completa: os 4 estados da planilha tradicional mais Goiás, São Paulo, preços e futuros. Chega 30 min depois da tradicional, que continua sendo enviada sem alteração."],
+    ["MT, MS, RO, PA", "Idênticos à planilha tradicional. Fonte: GTA dos órgãos estaduais (INDEA, IAGRO, IDARON, ADEPARA) — intenção de abate registrada na origem."],
     ["Goiás e São Paulo", "Fonte DIFERENTE: abate sob inspeção federal (SIGSIF/MAPA). Não cobre inspeção estadual e municipal, então o NÚMERO ABSOLUTO é menor e NÃO é comparável com os outros quatro estados. Use apenas a TENDÊNCIA do % de fêmeas."],
     ["Por que não dá para igualar", "GO e SP não publicam abate bovino por sexo nas próprias fontes de GTA. O SIGSIF é a única fonte pública com essa quebra."],
     ["Preços", "Indicador do Boi Gordo CEPEA/B3 (R$/@) e Indicador do Bezerro CEPEA/ESALQ-MS (R$/cabeça). Fonte: CEPEA-ESALQ/USP."],

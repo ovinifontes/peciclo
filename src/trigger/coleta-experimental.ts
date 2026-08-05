@@ -10,12 +10,16 @@ import { lerConfig } from "../config.js";
 import type { Futuro } from "../coletores/precos.js";
 
 /**
- * Rotina EXPERIMENTAL — roda 30 min depois da oficial, com dados adicionais
- * (GO e SP pelo SIGSIF federal, preços do CEPEA e futuros da B3).
+ * Rotina da planilha COMPLETA — roda 30 min depois da tradicional, com os
+ * dados adicionais (GO e SP pelo SIGSIF federal, preços do CEPEA e futuros da
+ * B3). Validada pelo sócio em 05/08/2026 e promovida a envio padrão.
  *
- * Isolada de propósito: não compartilha task, tabela nem gerador com a rotina
- * de produção. Se qualquer coisa aqui falhar, a planilha oficial das 06:00 não
- * é afetada. Para desligar, basta remover o cron desta task.
+ * Continua ISOLADA de propósito: não compartilha task, tabela nem gerador com
+ * a rotina tradicional. Se qualquer coisa aqui falhar, a planilha das 06:00
+ * não é afetada.
+ *
+ * O id da task segue "coleta-experimental" de propósito: renomear criaria um
+ * agendamento novo e deixaria o antigo órfão, com risco de envio duplicado.
  */
 export const coletaExperimental = schedules.task({
   id: "coleta-experimental",
@@ -67,8 +71,8 @@ export const coletaExperimental = schedules.task({
 
     // --- Planilha e envio ---
     const arquivo = await gerarPlanilhaExperimental(futuros);
-    const nomeArquivo = `abate-ciclo-EXPERIMENTAL-${dataLocal}.xlsx`;
-    await arquivarBruto({ caminho: `planilhas-experimental/${nomeArquivo}`, conteudo: arquivo });
+    const nomeArquivo = `abate-ciclo-completo-${dataLocal}.xlsx`;
+    await arquivarBruto({ caminho: `planilhas-completa/${nomeArquivo}`, conteudo: arquivo });
 
     let enviados = 0;
     if (await instanciaConectada({
@@ -86,10 +90,10 @@ export const coletaExperimental = schedules.task({
             arquivo,
             nomeArquivo,
             legenda:
-              `🧪 EXPERIMENTAL — ${dataLocal}\n` +
-              `Inclui Goiás e São Paulo (fonte federal SIF, não comparável em nível com os outros 4 estados) ` +
-              `e preços do boi gordo e bezerro. Fonte dos preços: CEPEA-ESALQ/USP.\n` +
-              `A planilha oficial continua sendo a que chega mais cedo.`,
+              `📊 Abate + Mercado — ${dataLocal}\n` +
+              `Os 6 estados (Goiás e São Paulo vêm da inspeção federal: use a tendência, não o nível) ` +
+              `mais preços do boi gordo e do bezerro e a curva de futuros da B3.\n` +
+              `Fonte dos preços: CEPEA-ESALQ/USP.`,
           });
           enviados++;
         } catch (erro) {
@@ -104,7 +108,7 @@ export const coletaExperimental = schedules.task({
 
     if (problemas.length > 0) {
       await alertarOperador(
-        `Planilha experimental ${dataLocal}: ${problemas.length} problema(s)`,
+        `Planilha completa ${dataLocal}: ${problemas.length} problema(s)`,
         problemas.join("\n"),
       );
     }

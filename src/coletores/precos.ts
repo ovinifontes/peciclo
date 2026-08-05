@@ -86,10 +86,26 @@ export function parsearCepea(js: string): Preco[] {
   return precos;
 }
 
+/**
+ * Monta a requisição do widget. O CEPEA está atrás de Cloudflare e devolve 403
+ * para IP estrangeiro/de datacenter — a nuvem do Trigger roda em us-east-1.
+ * Em produção passamos por uma Edge Function do Supabase (IP brasileiro);
+ * no dev local, com IP do Brasil, vai direto.
+ */
+function requisicaoCepea(): { url: string; headers: Record<string, string> } {
+  const proxyUrl = process.env.CEPEA_PROXY_URL;
+  const proxySecret = process.env.MS_PROXY_SECRET;
+  if (proxyUrl && proxySecret) {
+    return { url: proxyUrl, headers: { "x-proxy-secret": proxySecret } };
+  }
+  return { url: URL_CEPEA, headers: { "user-agent": USER_AGENT } };
+}
+
 /** Baixa e interpreta o widget do CEPEA. */
 export async function coletarCepea(signal?: AbortSignal): Promise<Preco[]> {
-  const resposta = await fetch(URL_CEPEA, {
-    headers: { "user-agent": USER_AGENT },
+  const { url, headers } = requisicaoCepea();
+  const resposta = await fetch(url, {
+    headers,
     signal: signal ?? AbortSignal.timeout(60_000),
   });
   if (!resposta.ok) throw new PrecoError(`CEPEA respondeu HTTP ${resposta.status}`);
