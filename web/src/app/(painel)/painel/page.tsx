@@ -1,5 +1,6 @@
 import { exigirClienteAtivo } from "@/lib/dal";
-import { obterDadosPainel, PAINEL_CICLO, type LeituraCiclo } from "@/lib/dados";
+import { obterDadosPainel, PAINEL_CICLO, type LeituraCiclo, type PontoCiclo } from "@/lib/dados";
+import GraficoFemeas, { type PontoGrafico } from "./grafico-femeas";
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -34,14 +35,27 @@ function dataBr(iso: string): string {
   return iso.slice(0, 10).split("-").reverse().join("/");
 }
 
+/** `{ ano: 2026, mes: 6 }` -> "06/26", o rótulo curto do eixo do gráfico. */
+function paraPonto(p: PontoCiclo): PontoGrafico {
+  return {
+    competencia: `${String(p.mes).padStart(2, "0")}/${String(p.ano).slice(2)}`,
+    pct: Number((p.pctFemeas * 100).toFixed(2)),
+  };
+}
+
 export default async function Painel() {
   // O layout do grupo já exige cliente ativo, mas a autorização se confere em
   // cada página: um layout não roda de novo a cada navegação.
   await exigirClienteAtivo();
 
-  const { leitura, precoBoi, precoBezerro } = await obterDadosPainel();
+  const { leitura, serieCiclo, precoBoi, precoBezerro } = await obterDadosPainel();
   const troca = precoBoi && precoBezerro ? precoBezerro.valor / precoBoi.valor : null;
   const estados = PAINEL_CICLO.join(" + ");
+
+  const pontos = serieCiclo.map(paraPonto);
+  const media = pontos.length
+    ? pontos.reduce((soma, p) => soma + p.pct, 0) / pontos.length
+    : 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,6 +113,36 @@ export default async function Painel() {
             ? `Cotações de ${dataBr(precoBoi.data)} · Fonte: CEPEA-ESALQ/USP`
             : "Sem cotação disponível"}
         </p>
+      </section>
+
+      <section className="rounded-lg border bg-white p-5">
+        <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+          Participação de fêmeas ao longo do tempo
+        </p>
+        <p className="mt-1 text-sm text-neutral-600">
+          É exatamente a série que classifica a fase acima: consolidado de composição fixa de{" "}
+          {estados}, terminando na competência da leitura. Um mês só vira ponto quando os{" "}
+          {PAINEL_CICLO.length} estados publicaram e o volume passou no teste de completude — um
+          estado ausente ou um mês ainda em coleta desenharia um degrau que parece mercado e não é.
+          O Pará fica fora.
+        </p>
+
+        {pontos.length ? (
+          <>
+            <div className="mt-4">
+              <GraficoFemeas serie={pontos} media={media} />
+            </div>
+            <p className="mt-2 text-xs text-neutral-500">
+              {pontos.length} meses, de {pontos.at(0)?.competencia} a {pontos.at(-1)?.competencia}.
+              A linha tracejada é a média destes meses ({umaCasa.format(media)}%) — referência do
+              próprio período, não meta nem normal histórico.
+            </p>
+          </>
+        ) : (
+          <p className="mt-4 text-sm text-neutral-600">
+            Sem meses utilizáveis ({estados} juntos e volume completo) — nada para desenhar.
+          </p>
+        )}
       </section>
     </div>
   );
