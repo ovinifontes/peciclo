@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { criarClienteAdmin } from "@/lib/admin-db";
 import { exigirAdmin } from "@/lib/dal";
@@ -18,20 +19,52 @@ import { exigirAdmin } from "@/lib/dal";
  *
  * Nenhuma ação escreve a coluna `papel`: não existe promover nem rebaixar pela
  * interface. Trocar papel é operação de banco, feita à mão, de propósito.
+ *
+ * Erro previsível (telefone torto, e-mail repetido, senha curta) volta para a
+ * tela como recado; `throw` fica só para o que não era para acontecer. Um 500
+ * cru na cara de quem digitou o telefone sem o DDI é defeito, não rigor.
  */
 
 /** ~100 anos. O formato é o de duração do Go; `none` levanta o bloqueio. */
 const BLOQUEIO_LONGO = "876000h";
 
+/** O Supabase recusa senha com menos de 6; o formulário já pede 8. */
+const SENHA_MINIMA = 8;
+
 type Status = "ativo" | "suspenso" | "cancelado";
 
-/** Mesmo formato que a Evolution usa: DDI+DDD+número, só dígitos. */
-function soDigitos(valor: FormDataEntryValue | null): string {
-  return String(valor ?? "").replace(/\D/g, "");
+// Não exportar nada além de função assíncrona daqui: num módulo "use server"
+// todo export vira endpoint, e o Next recusa o resto.
+type ErroAdmin = "telefone" | "email" | "senha" | "falha";
+
+function voltarComErro(erro: ErroAdmin): never {
+  redirect(`/admin?erro=${erro}`);
+}
+
+function pronto(): never {
+  // Redireciona mesmo no sucesso: sem isso, um `?erro=` da tentativa anterior
+  // continuaria na barra de endereços e o recado velho seguiria na tela.
+  revalidatePath("/admin");
+  redirect("/admin");
 }
 
 function texto(valor: FormDataEntryValue | null): string {
   return String(valor ?? "").trim();
+}
+
+/**
+ * Formato da Evolution: DDI+DDD+número, só dígitos — o mesmo `^\d{12,13}$` que
+ * a coluna cobra. Quem digita "(65) 99621-0067" está certo do ponto de vista
+ * humano, então a máscara sai e o 55 entra sozinho. Devolve `null` para campo
+ * em branco (telefone é opcional) e `undefined` para entrada que não dá para
+ * salvar.
+ */
+function normalizarTelefone(bruto: string): string | null | undefined {
+  const digitos = bruto.replace(/\D/g, "");
+  if (digitos === "") return null;
+  // 10 = fixo com DDD, 11 = celular com DDD: falta só o país.
+  const completo = digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
+  return /^\d{12,13}$/.test(completo) ? completo : undefined;
 }
 
 export async function criarCliente(formData: FormData) {
@@ -40,7 +73,10 @@ export async function criarCliente(formData: FormData) {
   const email = texto(formData.get("email"));
   const senha = String(formData.get("senha") ?? "");
   const nome = texto(formData.get("nome"));
-  const telefone = soDigitos(formData.get("telefone"));
+  const telefone = normalizarTelefone(texto(formData.get("telefone")));
+
+  if (telefone === undefined) voltarComErro("telefone");
+  if (senha.length < SENHA_MINIMA) voltarComErro("senha");
 
   const admin = criarClienteAdmin();
   const { data, error } = await admin.auth.admin.createUser({
@@ -49,13 +85,15 @@ export async function criarCliente(formData: FormData) {
     email_confirm: true, // criado pelo dono: não faz sentido pedir confirmação
   });
   if (error || !data.user) {
-    throw new Error(`Falha ao criar usuário: ${error?.message ?? "sem usuário na resposta"}`);
+    if (error?.code === "email_exists") voltarComErro("email");
+    if (error?.code === "weak_password") voltarComErro("senha");
+    voltarComErro("falha");
   }
 
   const { error: erroPerfil } = await admin.from("peciclo_perfis").insert({
     id: data.user.id,
     nome,
-    telefone_whatsapp: telefone || null,
+    telefone_whatsapp: telefone,
     papel: "cliente",
     status: "ativo",
   });
@@ -63,10 +101,10 @@ export async function criarCliente(formData: FormData) {
     // Sem perfil, a conta no Auth loga e não vê nada — um fantasma que ninguém
     // consegue administrar pela tela. Desfaz.
     await admin.auth.admin.deleteUser(data.user.id);
-    throw new Error(`Falha ao criar perfil: ${erroPerfil.message}`);
+    voltarComErro("falha");
   }
 
-  revalidatePath("/admin");
+  pronto();
 }
 
 /**
@@ -98,15 +136,15 @@ async function mudarStatus(id: string, status: Status) {
   const { error: erroBloqueio } = await admin.auth.admin.updateUserById(id, {
     ban_duration: status === "ativo" ? "none" : BLOQUEIO_LONGO,
   });
-  if (erroBloqueio) throw new Error(`Falha no bloqueio: ${erroBloqueio.message}`);
+  if (erroBloqueio) voltarComErro("falha");
 
   const { error } = await admin
     .from("peciclo_perfis")
     .update({ status, atualizado_em: new Date().toISOString() })
     .eq("id", id);
-  if (error) throw new Error(`Falha ao mudar status: ${error.message}`);
+  if (error) voltarComErro("falha");
 
-  revalidatePath("/admin");
+  pronto();
 }
 
 export async function suspender(id: string) {
@@ -125,19 +163,20 @@ export async function editarTelefone(formData: FormData) {
   await exigirAdmin();
 
   const id = texto(formData.get("id"));
-  const telefone = soDigitos(formData.get("telefone"));
+  const telefone = normalizarTelefone(texto(formData.get("telefone")));
+  if (telefone === undefined) voltarComErro("telefone");
 
   const admin = criarClienteAdmin();
   const { error } = await admin
     .from("peciclo_perfis")
     .update({
-      telefone_whatsapp: telefone || null,
+      telefone_whatsapp: telefone,
       atualizado_em: new Date().toISOString(),
     })
     .eq("id", id);
-  if (error) throw new Error(`Falha ao editar telefone: ${error.message}`);
+  if (error) voltarComErro("falha");
 
-  revalidatePath("/admin");
+  pronto();
 }
 
 export async function trocarSenha(formData: FormData) {
@@ -145,10 +184,11 @@ export async function trocarSenha(formData: FormData) {
 
   const id = texto(formData.get("id"));
   const senha = String(formData.get("senha") ?? "");
+  if (senha.length < SENHA_MINIMA) voltarComErro("senha");
 
   const admin = criarClienteAdmin();
   const { error } = await admin.auth.admin.updateUserById(id, { password: senha });
-  if (error) throw new Error(`Falha ao trocar senha: ${error.message}`);
+  if (error) voltarComErro(error.code === "weak_password" ? "senha" : "falha");
 
-  revalidatePath("/admin");
+  pronto();
 }

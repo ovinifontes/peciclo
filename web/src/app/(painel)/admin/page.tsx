@@ -33,8 +33,21 @@ const CORES: Record<Perfil["status"], string> = {
 const CAMPO = "rounded border border-neutral-300 px-2 py-1 text-sm";
 const LINK = "text-xs text-emerald-700 underline";
 
-export default async function Admin() {
+const RECADOS: Record<string, string> = {
+  telefone:
+    "Telefone não salvo: use DDD + número (65 99621-0067) ou o formato completo com o 55 na frente.",
+  email: "E-mail já cadastrado. Cada conta precisa de um endereço próprio.",
+  senha: "Senha muito curta: no mínimo 8 caracteres.",
+  falha: "Não deu para concluir. Tente de novo; se repetir, é problema do servidor.",
+};
+
+export default async function Admin({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string }>;
+}) {
   const eu = await exigirAdmin();
+  const recado = RECADOS[(await searchParams).erro ?? ""];
 
   const admin = criarClienteAdmin();
   const { data: perfis } = await admin
@@ -59,19 +72,29 @@ export default async function Admin() {
         </p>
       </section>
 
+      {recado && (
+        <p
+          role="alert"
+          className="rounded-lg border border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-900"
+        >
+          {recado}
+        </p>
+      )}
+
       <section className="rounded-lg border bg-white p-5">
         <h2 className="mb-3 text-sm font-medium">Novo cliente</h2>
         <form action={criarCliente} className="flex flex-wrap items-center gap-2">
           <input name="nome" required placeholder="nome" className={CAMPO} />
           <input name="email" type="email" required placeholder="e-mail" className={CAMPO} />
           <input name="senha" required minLength={8} placeholder="senha inicial" className={CAMPO} />
-          <input name="telefone" placeholder="5565999999999" className={CAMPO} />
+          <input name="telefone" placeholder="65 99621-0067" className={CAMPO} />
           <button className="rounded bg-emerald-700 px-3 py-1 text-sm font-medium text-white">
             Criar
           </button>
         </form>
         <p className="mt-2 text-xs text-neutral-500">
-          Telefone no formato da Evolution: DDI+DDD+número, só dígitos. Pode ficar em branco.
+          Telefone com DDD; o 55 do Brasil entra sozinho e a máscara é ignorada. Pode ficar
+          em branco — aí o cliente não recebe as planilhas por WhatsApp.
         </p>
       </section>
 
