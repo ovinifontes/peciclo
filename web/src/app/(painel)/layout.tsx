@@ -21,6 +21,9 @@ export default async function PainelLayout({
           Peciclo
         </Link>
         <nav className="flex items-center gap-4 text-sm">
+          <Link href="/painel/planilhas" className="text-emerald-700">
+            Planilhas
+          </Link>
           {perfil.papel === "admin" && (
             <Link href="/admin" className="text-emerald-700">
               Clientes

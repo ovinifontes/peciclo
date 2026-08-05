@@ -1,6 +1,7 @@
 import { exigirClienteAtivo } from "@/lib/dal";
 import { obterDadosPainel, PAINEL_CICLO, type LeituraCiclo, type PontoCiclo } from "@/lib/dados";
 import GraficoFemeas, { type PontoGrafico } from "./grafico-femeas";
+import TabelaMensal from "./tabela";
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -48,7 +49,7 @@ export default async function Painel() {
   // cada página: um layout não roda de novo a cada navegação.
   await exigirClienteAtivo();
 
-  const { leitura, serieCiclo, precoBoi, precoBezerro } = await obterDadosPainel();
+  const { leitura, serie, serieCiclo, precoBoi, precoBezerro } = await obterDadosPainel();
   const troca = precoBoi && precoBezerro ? precoBezerro.valor / precoBoi.valor : null;
   const estados = PAINEL_CICLO.join(" + ");
 
@@ -143,6 +144,17 @@ export default async function Painel() {
             Sem meses utilizáveis ({estados} juntos e volume completo) — nada para desenhar.
           </p>
         )}
+      </section>
+
+      <section className="rounded-lg border bg-white p-5">
+        <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+          Abate mensal por estado
+        </p>
+        <p className="mt-1 mb-4 text-sm text-neutral-600">
+          O dado cru por trás de tudo acima, estado por estado e sexo por sexo — aqui{" "}
+          <strong>com o Pará</strong>, que só fica fora do consolidado do ciclo.
+        </p>
+        <TabelaMensal serie={serie} />
       </section>
     </div>
   );
