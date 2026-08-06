@@ -1,4 +1,7 @@
-import type { LinhaMensal } from "../dados/mensal.js";
+// De `tipos.js`, não de `dados/mensal.js`: este módulo é importado pelo site, e
+// `dados/mensal.js` arrasta o cliente do Supabase da raiz para a checagem de
+// tipos — dependência que não existe no build da Vercel.
+import type { LinhaMensal } from "../tipos.js";
 import type { UF } from "../tipos.js";
 
 /**

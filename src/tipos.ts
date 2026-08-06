@@ -38,3 +38,20 @@ export interface AgregadoMensal {
   sexo: Sexo;
   quantidade: number;
 }
+
+/**
+ * Uma linha do abate mensal já consolidado, do jeito que sai do banco.
+ *
+ * Mora aqui, e não em `dados/mensal.ts`, porque o site importa este tipo: se
+ * ele viesse de lá, a checagem de tipos do site puxaria `dados/cliente.ts` e
+ * exigiria o `@supabase/supabase-js` da RAIZ — que não existe no build da
+ * Vercel, onde só a pasta `web/` instala dependências. `tipos.ts` não importa
+ * nada, então é fronteira segura para compartilhar.
+ */
+export interface LinhaMensal {
+  uf: UF;
+  ano: number;
+  mes: number;
+  sexo: "MACHO" | "FEMEA";
+  quantidade: number;
+}

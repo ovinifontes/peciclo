@@ -1,4 +1,4 @@
-import type { AgregadoMensal, Janela, UF } from "../tipos.js";
+import type { AgregadoMensal, Janela, LinhaMensal, UF } from "../tipos.js";
 import { obterCliente } from "./cliente.js";
 import { lerTudo } from "./paginar.js";
 
@@ -73,13 +73,10 @@ export async function gravarAgregados(
   if (error) throw new Error(`Falha ao gravar agregados: ${error.message}`);
 }
 
-export interface LinhaMensal {
-  uf: UF;
-  ano: number;
-  mes: number;
-  sexo: "MACHO" | "FEMEA";
-  quantidade: number;
-}
+// Declarado em `tipos.ts` (que não importa nada) para o site poder usá-lo sem
+// arrastar o cliente do Supabase junto. Reexportado aqui para não quebrar quem
+// já importava daqui.
+export type { LinhaMensal } from "../tipos.js";
 
 /** Lê o abate mensal que alimenta a planilha. Igualdade exata em ABATE. */
 export async function lerAbateMensal(): Promise<LinhaMensal[]> {

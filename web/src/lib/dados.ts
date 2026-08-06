@@ -15,7 +15,10 @@ import {
   type PontoCiclo,
 } from "../../../src/ciclo/leitura";
 import { lerTudo } from "../../../src/dados/paginar";
-import type { LinhaMensal } from "../../../src/dados/mensal";
+// De `tipos`, não de `dados/mensal`: aquele módulo importa o cliente do
+// Supabase da RAIZ, que não é instalado no build da Vercel (só `web/` roda
+// npm install). `tipos.ts` não importa nada — é a fronteira segura.
+import type { LinhaMensal } from "../../../src/tipos";
 
 export { PAINEL_CICLO };
 export type { LeituraCiclo, LinhaMensal, PontoCiclo };
