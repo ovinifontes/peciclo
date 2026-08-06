@@ -11,3 +11,5 @@ export default function ContaInativa() {
     </main>
   );
 }
+
+export const metadata = { title: "Acesso indisponível" };

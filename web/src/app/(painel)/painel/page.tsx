@@ -178,3 +178,5 @@ function Numero({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?:
     </div>
   );
 }
+
+export const metadata = { title: "Painel" };

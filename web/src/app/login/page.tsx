@@ -26,3 +26,5 @@ async function Erro({ searchParams }: { searchParams: Promise<{ erro?: string }>
   if (!erro) return null;
   return <p className="text-sm text-red-600">E-mail ou senha inválidos.</p>;
 }
+
+export const metadata = { title: "Entrar" };

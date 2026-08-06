@@ -72,3 +72,5 @@ function Linha({ arquivo }: { arquivo: Planilha }) {
     </li>
   );
 }
+
+export const metadata = { title: "Planilhas" };

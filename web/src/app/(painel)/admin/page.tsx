@@ -208,3 +208,5 @@ function Botao({
     </form>
   );
 }
+
+export const metadata = { title: "Clientes" };
