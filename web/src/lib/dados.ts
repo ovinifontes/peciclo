@@ -198,6 +198,38 @@ export async function montarContextoChat(): Promise<string> {
   return partes.join("\n");
 }
 
+export interface MensagemDoDia {
+  papel: "usuario" | "assistente";
+  conteudo: string;
+}
+
+/**
+ * O histórico do chat de hoje (America/Sao_Paulo, UTC−3 fixo desde 2019). O
+ * RLS recorta por usuário — o cliente comum só enxerga as próprias mensagens;
+ * a consulta filtra apenas o dia. Ordem por `id`, não por `criado_em`: a
+ * gravação insere pergunta e resposta no mesmo INSERT e as duas saem com o
+ * MESMO timestamp — só a identity desempata.
+ */
+export async function lerMensagensChatDoDia(): Promise<MensagemDoDia[]> {
+  const supabase = await createClient();
+  const dia = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const linhas = await lerTudo<{ papel: string; conteudo: string }>(
+    (de, ate) =>
+      supabase
+        .from("peciclo_chat_mensagens")
+        .select("papel, conteudo")
+        .gte("criado_em", `${dia}T00:00:00-03:00`)
+        .order("id")
+        .range(de, ate),
+    "mensagens do chat",
+  );
+  return linhas.map((l) => ({
+    // O CHECK da tabela só admite esses dois papéis; o ternário é para o tipo.
+    papel: l.papel === "usuario" ? "usuario" : "assistente",
+    conteudo: String(l.conteudo),
+  }));
+}
+
 /**
  * Este módulo não sabe quem é o usuário — quem valida acesso é quem chama
  * (`dal.ts`). O que ele garante é que o dado volta completo e do jeito que a

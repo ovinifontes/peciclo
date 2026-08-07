@@ -24,6 +24,9 @@ export default async function PainelLayout({
           <Link href="/painel/planilhas" className="text-emerald-700">
             Planilhas
           </Link>
+          <Link href="/painel/chat" className="text-emerald-700">
+            Chat
+          </Link>
           {perfil.papel === "admin" && (
             <Link href="/admin" className="text-emerald-700">
               Clientes
