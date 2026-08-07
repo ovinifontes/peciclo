@@ -4,6 +4,7 @@ import { coletorMt } from "./coletor-mt.js";
 import { coletorRo } from "./coletor-ro.js";
 import { coletorPa } from "./coletor-pa.js";
 import { gerarEEnviar } from "./gerar-e-enviar.js";
+import { recoleta } from "./recoleta.js";
 import { alertarOperador } from "../notificacao/alertas.js";
 
 export const coletaDiaria = schedules.task({
@@ -59,6 +60,20 @@ export const coletaDiaria = schedules.task({
     });
 
     if (falhas.length > 0) {
+      // Recoleta automática só das UFs que falharam, 45 min depois (até 2
+      // tentativas; ela mesma se reagenda). Antes do alerta e protegida por
+      // try/catch: nem alerta indisponível nem API do Trigger fora do ar podem
+      // derrubar uma coleta que já terminou.
+      try {
+        await recoleta.trigger(
+          { ufs: falhas.map((f) => f.uf), dataReferencia: dataLocal, tentativa: 1 },
+          { delay: "45m" },
+        );
+      } catch (erro) {
+        logger.error("falha ao agendar a recoleta", {
+          erro: erro instanceof Error ? erro.message : String(erro),
+        });
+      }
       await alertarOperador(
         `Coleta ${dataLocal}: ${falhas.length} de ${ufs.length} coletores falharam`,
         falhas.map((f) => `${f.uf}: ${f.erro}`).join("\n"),
