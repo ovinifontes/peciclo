@@ -1,5 +1,12 @@
 import { exigirClienteAtivo } from "@/lib/dal";
-import { obterDadosPainel, PAINEL_CICLO, type LeituraCiclo, type PontoCiclo } from "@/lib/dados";
+import {
+  lerCenarioMaisRecente,
+  obterDadosPainel,
+  PAINEL_CICLO,
+  type Cenario,
+  type LeituraCiclo,
+  type PontoCiclo,
+} from "@/lib/dados";
 import GraficoFemeas, { type PontoGrafico } from "./grafico-femeas";
 import TabelaMensal from "./tabela";
 
@@ -22,6 +29,12 @@ const EXPLICACAO_FASE: Record<LeituraCiclo["fase"], string> = {
   indefinido: "Ainda não há meses completos o suficiente para classificar a fase.",
 };
 
+// O rótulo diz a verdade sobre quem escreveu: texto de reserva não finge ser IA.
+const ROTULO_ORIGEM: Record<Cenario["origem"], string> = {
+  ia: "Escrito por IA a partir dos dados desta página, com conferência automática dos números",
+  reserva: "Resumo automático",
+};
+
 const pp = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -34,6 +47,12 @@ const reais = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 /** "2026-08-04" -> "04/08/2026". Sem `new Date`: evita virar o dia por fuso. */
 function dataBr(iso: string): string {
   return iso.slice(0, 10).split("-").reverse().join("/");
+}
+
+/** "2026-08-06" -> "6 de agosto de 2026". Também sem `new Date`, pelo mesmo fuso. */
+function dataExtenso(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split("-").map(Number);
+  return `${dia} de ${MESES[mes - 1]} de ${ano}`;
 }
 
 /** `{ ano: 2026, mes: 6 }` -> "06/26", o rótulo curto do eixo do gráfico. */
@@ -49,7 +68,10 @@ export default async function Painel() {
   // cada página: um layout não roda de novo a cada navegação.
   await exigirClienteAtivo();
 
-  const { leitura, serie, serieCiclo, precoBoi, precoBezerro } = await obterDadosPainel();
+  const [{ leitura, serie, serieCiclo, precoBoi, precoBezerro }, cenario] = await Promise.all([
+    obterDadosPainel(),
+    lerCenarioMaisRecente(),
+  ]);
   const troca = precoBoi && precoBezerro ? precoBezerro.valor / precoBoi.valor : null;
   const estados = PAINEL_CICLO.join(" + ");
 
@@ -115,6 +137,21 @@ export default async function Painel() {
             : "Sem cotação disponível"}
         </p>
       </section>
+
+      {cenario && (
+        <section className="rounded-lg border bg-white p-5">
+          <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+            Cenário de hoje
+          </p>
+          <h2 className="mt-1 text-lg font-semibold">{dataExtenso(cenario.data)}</h2>
+          <p className="mt-3 whitespace-pre-line leading-relaxed text-neutral-800">
+            {cenario.texto}
+          </p>
+          <p className="mt-3 border-t pt-3 text-xs text-neutral-500">
+            {ROTULO_ORIGEM[cenario.origem]}
+          </p>
+        </section>
+      )}
 
       <section className="rounded-lg border bg-white p-5">
         <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">

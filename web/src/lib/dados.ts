@@ -100,6 +100,39 @@ function ateACompetencia(pontos: PontoCiclo[], leitura: LeituraCiclo): PontoCicl
   return pontos.filter((p) => p.ano < ate.ano || (p.ano === ate.ano && p.mes <= ate.mes));
 }
 
+export interface Cenario {
+  /** "2026-08-06" — o dia a que o texto se refere. */
+  data: string;
+  texto: string;
+  origem: "ia" | "reserva";
+}
+
+/**
+ * O cenário mais recente, ou null se a tabela ainda está vazia (primeiro dia,
+ * falha total da rotina — casos em que o bloco simplesmente não aparece).
+ * Leitura direta, sem `lerTudo`: `data` é chave primária e só a última linha
+ * interessa — não existe cenário para paginar.
+ */
+export async function lerCenarioMaisRecente(): Promise<Cenario | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("peciclo_cenarios")
+    .select("data, texto, origem")
+    .order("data", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao ler cenário: ${error.message}`);
+  if (!data) return null;
+  return {
+    data: String(data.data),
+    texto: String(data.texto),
+    // O CHECK da tabela só admite esses dois valores; o ternário é para o
+    // TypeScript, não para dado real.
+    origem: data.origem === "reserva" ? "reserva" : "ia",
+  };
+}
+
 /**
  * Este módulo não sabe quem é o usuário — quem valida acesso é quem chama
  * (`dal.ts`). O que ele garante é que o dado volta completo e do jeito que a
