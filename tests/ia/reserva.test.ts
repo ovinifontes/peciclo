@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Dossie } from "../../src/ia/dossie.js";
-import { textoReserva } from "../../src/ia/reserva.js";
+import { resumoReserva, textoReserva } from "../../src/ia/reserva.js";
 import { validarTexto } from "../../src/ia/validacao.js";
 import type { FaseCiclo, PontoCiclo } from "../../src/ciclo/leitura.js";
 
@@ -80,5 +80,62 @@ describe("textoReserva", () => {
     const linhas = textoReserva(dossieDaFase("retencao", 0.4984, -4.17)).split("\n").filter((l) => l.trim() !== "");
     expect(linhas.length).toBeGreaterThanOrEqual(5);
     expect(linhas.length).toBeLessThanOrEqual(12);
+  });
+});
+
+describe("resumoReserva", () => {
+  it("retenção: preço com variação, fase com competência e %, relação de troca", () => {
+    const texto = resumoReserva(dossieDaFase("retencao", 0.4984, -4.17));
+    expect(texto).toContain("retenção");
+    expect(texto).toContain("350,20"); // boi
+    expect(texto).toContain("1,30"); // variação do dia (sinal fica fora do token)
+    expect(texto).toContain("junho de 2026"); // competência
+    expect(texto).toContain("49,84"); // % de fêmeas
+    expect(texto).toContain("9,62"); // relação de troca
+  });
+
+  it("liquidação: fase e números corretos", () => {
+    const texto = resumoReserva(dossieDaFase("liquidacao", 0.5423, 3.05));
+    expect(texto).toContain("liquidação");
+    expect(texto).toContain("54,23");
+  });
+
+  it("transição: fase e números corretos", () => {
+    const texto = resumoReserva(dossieDaFase("transicao", 0.5101, 0.42));
+    expect(texto).toContain("transição");
+    expect(texto).toContain("51,01");
+  });
+
+  it("todo número citado passa na própria validação (a reserva nunca inventa)", () => {
+    for (const [fase, pct, yoy] of [["retencao", 0.4984, -4.17], ["liquidacao", 0.5423, 3.05], ["transicao", 0.5101, 0.42]] as const) {
+      const d = dossieDaFase(fase, pct, yoy);
+      expect(validarTexto(resumoReserva(d), d)).toEqual({ ok: true, invalidos: [] });
+    }
+  });
+
+  it("cabe no WhatsApp: 3 a 4 linhas, bem menor que o texto completo", () => {
+    const texto = resumoReserva(dossieDaFase("retencao", 0.4984, -4.17));
+    const linhas = texto.split("\n").filter((l) => l.trim() !== "");
+    expect(linhas.length).toBeGreaterThanOrEqual(3);
+    expect(linhas.length).toBeLessThanOrEqual(4);
+    expect(texto.length).toBeLessThan(700);
+  });
+
+  it("sem dados de mercado nem leitura, não escreve undefined, NaN ou null", () => {
+    const d: Dossie = {
+      geradoEm: "2026-08-06",
+      ciclo: { fase: "indefinido", competencia: null, pctFemeas: null, yoyMm3Pp: null, mesesNaDirecao: 0 },
+      serie: [],
+      precos: [],
+      variacaoBoiDia: null,
+      futuros: [],
+      relacaoTroca: null,
+      estadosPainel: "MT + MS + RO",
+    };
+    const texto = resumoReserva(d);
+    expect(texto).not.toContain("undefined");
+    expect(texto).not.toContain("NaN");
+    expect(texto).not.toContain("null");
+    expect(texto.length).toBeGreaterThan(0);
   });
 });

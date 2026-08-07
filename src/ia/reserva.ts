@@ -58,3 +58,48 @@ export function textoReserva(d: Dossie): string {
 
   return linhas.join("\n");
 }
+
+/** Nome curto da fase para o resumo — sem a explicação didática do completo. */
+const FASE_CURTA: Record<string, string> = {
+  retencao: "retenção de fêmeas",
+  liquidacao: "liquidação de fêmeas",
+  transicao: "transição",
+};
+
+/**
+ * Reserva do RESUMO do WhatsApp: 3–4 linhas determinísticas (preço e variação,
+ * fase com competência e %, relação de troca). Mesmo invariante do texto
+ * completo: cada número vem direto do dossiê e passa em `validarTexto`.
+ * Sem cabeçalho — a rotina põe o título "📈 Cenário Peciclo — dd/mm/aaaa".
+ */
+export function resumoReserva(d: Dossie): string {
+  const c = d.ciclo;
+  const linhas: string[] = [];
+
+  const boi = d.precos.find((p) => p.serie === "boi_gordo");
+  if (boi) {
+    linhas.push(
+      `Boi gordo a R$ ${formatarNumeroBr(boi.valor)} a arroba (${formatarDataBr(boi.data)})` +
+        (d.variacaoBoiDia !== null ? `, ${formatarNumeroBr(d.variacaoBoiDia)} R$/@ sobre o pregão anterior.` : `.`),
+    );
+  }
+
+  const fase = FASE_CURTA[c.fase];
+  if (fase && c.competencia && c.pctFemeas !== null) {
+    linhas.push(
+      `Ciclo em ${fase}: fêmeas a ${formatarNumeroBr(c.pctFemeas * 100)}% do abate em ${mesPorExtenso(c.competencia.ano, c.competencia.mes)}` +
+        (c.mesesNaDirecao > 0 ? `, há ${c.mesesNaDirecao} meses na mesma direção.` : `.`),
+    );
+  }
+
+  if (d.relacaoTroca !== null) {
+    linhas.push(`Relação de troca: ${formatarNumeroBr(d.relacaoTroca)} arrobas de boi por bezerro (MS).`);
+  }
+
+  // Dia sem nenhum dado utilizável: uma linha honesta, nunca texto vazio.
+  if (linhas.length === 0) {
+    linhas.push(`Sem dado novo utilizável hoje no consolidado ${d.estadosPainel}.`);
+  }
+
+  return linhas.join("\n");
+}
