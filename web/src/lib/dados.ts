@@ -15,6 +15,16 @@ import {
   type PontoCiclo,
 } from "../../../src/ciclo/leitura";
 import { lerTudo } from "../../../src/dados/paginar";
+// O dossiê é o MESMO que a rotina do cenário usa: o chat e o texto diário
+// enxergam o dia pelo mesmo retrato, montado pela mesma função testada na
+// suíte da raiz. `dossie.ts` é puro (só importa de `ciclo/leitura`), então a
+// regra da fronteira continua valendo.
+import {
+  dossieParaTexto,
+  formatarDataBr,
+  montarDossie,
+  type PrecoDia,
+} from "../../../src/ia/dossie";
 // De `tipos`, não de `dados/mensal`: aquele módulo importa o cliente do
 // Supabase da RAIZ, que não é instalado no build da Vercel (só `web/` roda
 // npm install). `tipos.ts` não importa nada — é a fronteira segura.
@@ -131,6 +141,61 @@ export async function lerCenarioMaisRecente(): Promise<Cenario | null> {
     // TypeScript, não para dado real.
     origem: data.origem === "reserva" ? "reserva" : "ia",
   };
+}
+
+/**
+ * Todas as cotações, de todas as séries — `montarDossie` escolhe as mais
+ * recentes e calcula a variação do boi (que precisa dos DOIS últimos pregões,
+ * por isso `ultimoPreco` não serve aqui). `lerTudo` pelo mesmo motivo de
+ * sempre: um dia a tabela passa de 1000 linhas e o corte silencioso comeria
+ * justamente os pregões recentes.
+ */
+async function lerPrecosTodos(): Promise<PrecoDia[]> {
+  const supabase = await createClient();
+  const linhas = await lerTudo<PrecoDia>(
+    (de, ate) =>
+      supabase
+        .from("peciclo_precos")
+        .select("serie, data, valor")
+        .order("data")
+        .range(de, ate),
+    "preços",
+  );
+  return linhas.map((p) => ({ ...p, valor: Number(p.valor) }));
+}
+
+/**
+ * O contexto que o chat entrega ao modelo: o dossiê do dia (mesma montagem da
+ * rotina do cenário) + o cenário publicado, se houver. Sem futuros da B3: o
+ * coletor (`coletarFuturos`) vive na raiz com dependências que o build do site
+ * não instala — a curva chega ao chat pelo texto do cenário, que já a cita.
+ */
+export async function montarContextoChat(): Promise<string> {
+  const [abate, precos, cenario] = await Promise.all([
+    lerAbateMensal(),
+    lerPrecosTodos(),
+    lerCenarioMaisRecente(),
+  ]);
+
+  const dossie = montarDossie({
+    // O dia do cliente, não o do servidor: a Vercel roda em UTC e viraria a
+    // data três horas antes do Brasil.
+    hoje: new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
+    ciclo: lerCiclo(abate),
+    serie: serieComposicaoFixa(abate),
+    precos,
+    futuros: [],
+  });
+
+  const partes = [dossieParaTexto(dossie)];
+  if (cenario) {
+    partes.push(
+      "",
+      `CENÁRIO PUBLICADO EM ${formatarDataBr(cenario.data)}${cenario.origem === "reserva" ? " (resumo automático)" : ""}`,
+      cenario.texto,
+    );
+  }
+  return partes.join("\n");
 }
 
 /**

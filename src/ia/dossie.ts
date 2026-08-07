@@ -6,7 +6,12 @@
 // REGRA DURA (herdada da Fatia 1): este módulo é importado pelo SITE por
 // caminho relativo, e o build da Vercel não instala as dependências da raiz.
 // Só pode importar de `../ciclo/leitura.js`, `../tipos.js` e vizinhos puros.
-import { PAINEL_CICLO } from "../ciclo/leitura.js";
+// Import de VALOR sem a extensão `.js`, fugindo da convenção da raiz: o
+// Turbopack (build do site) não reescreve `.js` → `.ts`, e este é o primeiro
+// import de valor da raiz alcançado pelo web — imports `type` são apagados na
+// compilação e nunca chegam ao bundler. Com `moduleResolution: "Bundler"` nos
+// dois tsconfigs, a forma sem extensão vale para tsc, Vitest, Trigger e Next.
+import { PAINEL_CICLO } from "../ciclo/leitura";
 import type { LeituraCiclo, PontoCiclo } from "../ciclo/leitura.js";
 
 export interface PrecoDia {
