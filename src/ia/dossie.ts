@@ -102,7 +102,7 @@ export function mesPorExtenso(ano: number, mes: number): string {
 }
 
 /** "2026-08-05" → "05/08/2026". */
-function dataBr(iso: string): string {
+export function formatarDataBr(iso: string): string {
   const [ano, mes, dia] = iso.split("-");
   return ano && mes && dia ? `${dia}/${mes}/${ano}` : iso;
 }
@@ -121,7 +121,7 @@ export function dossieParaTexto(d: Dossie): string {
   const linhas: string[] = [];
   const c = d.ciclo;
 
-  linhas.push(`DOSSIÊ PECICLO — ${dataBr(d.geradoEm)}`);
+  linhas.push(`DOSSIÊ PECICLO — ${formatarDataBr(d.geradoEm)}`);
   linhas.push(`Estados do consolidado do ciclo: ${d.estadosPainel}`);
   linhas.push("");
 
@@ -142,7 +142,7 @@ export function dossieParaTexto(d: Dossie): string {
   if (d.precos.length > 0) {
     linhas.push("PREÇOS MAIS RECENTES (cada um com a data do pregão)");
     for (const p of d.precos) {
-      linhas.push(`- ${ROTULO_SERIE[p.serie] ?? p.serie.replaceAll("_", " ")}: R$ ${formatarNumeroBr(p.valor)} em ${dataBr(p.data)}`);
+      linhas.push(`- ${ROTULO_SERIE[p.serie] ?? p.serie.replaceAll("_", " ")}: R$ ${formatarNumeroBr(p.valor)} em ${formatarDataBr(p.data)}`);
     }
     if (d.variacaoBoiDia !== null) linhas.push(`- Variação do boi gordo vs pregão anterior: ${formatarNumeroBr(d.variacaoBoiDia)} R$/@`);
     if (d.relacaoTroca !== null) linhas.push(`- Relação de troca: um bezerro (MS) vale ${formatarNumeroBr(d.relacaoTroca)} arrobas de boi gordo`);
