@@ -101,6 +101,22 @@ export function mesPorExtenso(ano: number, mes: number): string {
   return `${MESES[mes - 1] ?? `mês ${mes}`} de ${ano}`;
 }
 
+/** Contrato da B3 ("Outubro/2026") → vencimento curto do dossiê ("out/26"). */
+export function contratoParaVencimento(contrato: string): string {
+  const [nome, ano] = contrato.split("/");
+  if (!nome?.trim() || !ano?.trim()) return contrato;
+  const mes = nome.trim().toLowerCase();
+  const conhecido = MESES.find((m) => m === mes);
+  // Mês fora da lista: 3 primeiras letras ainda dão um rótulo legível.
+  const abreviado = (conhecido ?? mes).slice(0, 3);
+  return `${abreviado}/${ano.trim().slice(-2)}`;
+}
+
+/** Converte a curva coletada (`coletarFuturos`) para o formato do dossiê. */
+export function futurosParaDossie(futuros: Array<{ contrato: string; fechamento: number }>): FuturoDia[] {
+  return futuros.map((f) => ({ vencimento: contratoParaVencimento(f.contrato), preco: f.fechamento }));
+}
+
 /** "2026-08-05" → "05/08/2026". */
 export function formatarDataBr(iso: string): string {
   const [ano, mes, dia] = iso.split("-");

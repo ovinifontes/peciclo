@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Dossie } from "../../src/ia/dossie.js";
 import { dossieParaTexto } from "../../src/ia/dossie.js";
-import { sistemaCenario, usuarioCenario } from "../../src/ia/prompt.js";
+import { sistemaCenario, usuarioCenario, usuarioCorrecao } from "../../src/ia/prompt.js";
 
 const dossie: Dossie = {
   geradoEm: "2026-08-06",
@@ -26,5 +26,15 @@ describe("sistemaCenario", () => {
 describe("usuarioCenario", () => {
   it("embute o dossiê serializado por dossieParaTexto", () => {
     expect(usuarioCenario(dossie)).toContain(dossieParaTexto(dossie));
+  });
+});
+
+describe("usuarioCorrecao", () => {
+  it("aponta os tokens reprovados e mantém o dossiê completo", () => {
+    const p = usuarioCorrecao(dossie, ["152.596", "9,99"]);
+    expect(p).toContain(dossieParaTexto(dossie)); // o dossiê vai de novo, inteiro
+    expect(p).toContain("152.596");
+    expect(p).toContain("9,99");
+    expect(p).toMatch(/não estão no dossiê/i);
   });
 });

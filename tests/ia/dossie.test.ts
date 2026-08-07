@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dossieParaTexto, montarDossie } from "../../src/ia/dossie.js";
+import { contratoParaVencimento, dossieParaTexto, futurosParaDossie, montarDossie } from "../../src/ia/dossie.js";
 import type { FuturoDia, PrecoDia } from "../../src/ia/dossie.js";
 import type { LeituraCiclo, PontoCiclo } from "../../src/ciclo/leitura.js";
 
@@ -83,6 +83,34 @@ describe("montarDossie", () => {
     const indefinido: LeituraCiclo = { fase: "indefinido", competencia: null, pctFemeas: null, yoyMm3Pp: null, mesesNaDirecao: 0 };
     const d = montarDossie({ hoje: "2026-08-06", ciclo: indefinido, serie, precos, futuros });
     expect(d.serie).toHaveLength(serie.length);
+  });
+});
+
+describe("contratoParaVencimento", () => {
+  it("abrevia o contrato da B3 para o vencimento curto do dossiê", () => {
+    expect(contratoParaVencimento("Outubro/2026")).toBe("out/26");
+    expect(contratoParaVencimento("Agosto/2026")).toBe("ago/26");
+    expect(contratoParaVencimento("Março/2027")).toBe("mar/27"); // acento no nome
+    expect(contratoParaVencimento("Janeiro/2027")).toBe("jan/27");
+  });
+
+  it("com formato inesperado, devolve algo legível em vez de quebrar", () => {
+    expect(contratoParaVencimento("BGI X26")).toBe("BGI X26"); // sem "/": intacto
+    expect(contratoParaVencimento("Vindima/2026")).toBe("vin/26"); // mês desconhecido: 3 letras
+  });
+});
+
+describe("futurosParaDossie", () => {
+  it("converte a curva coletada para o formato do dossiê", () => {
+    expect(
+      futurosParaDossie([
+        { contrato: "Outubro/2026", fechamento: 348.5 },
+        { contrato: "Janeiro/2027", fechamento: 355.1 },
+      ]),
+    ).toEqual([
+      { vencimento: "out/26", preco: 348.5 },
+      { vencimento: "jan/27", preco: 355.1 },
+    ]);
   });
 });
 

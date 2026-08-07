@@ -35,3 +35,20 @@ export function usuarioCenario(d: Dossie): string {
     "</dossie>",
   ].join("\n");
 }
+
+/**
+ * Prompt da regeneração: a primeira tentativa citou números fora do dossiê e a
+ * validação reprovou. Vai o dossiê inteiro de novo (a conversa não tem
+ * histórico — cada chamada é independente) mais os tokens exatos reprovados.
+ */
+export function usuarioCorrecao(d: Dossie, invalidos: string[]): string {
+  return [
+    "Sua tentativa anterior de escrever o cenário citou números que NÃO estão no dossiê e foi reprovada pela conferência automática.",
+    `Números reprovados: ${invalidos.join("; ")}.`,
+    "Escreva o cenário novamente, do zero, usando SOMENTE números que aparecem no dossiê abaixo, exatamente como estão lá (pode arredondar para menos casas decimais; nunca crie casas a mais nem calcule valores novos).",
+    "",
+    "<dossie>",
+    dossieParaTexto(d),
+    "</dossie>",
+  ].join("\n");
+}

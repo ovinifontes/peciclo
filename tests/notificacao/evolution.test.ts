@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EvolutionApiError, enviarDocumento, normalizarNumero } from "../../src/notificacao/evolution.js";
+import { EvolutionApiError, enviarDocumento, enviarTexto, normalizarNumero } from "../../src/notificacao/evolution.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -61,5 +61,47 @@ describe("enviarDocumento", () => {
 
   it("recusa buffer vazio", async () => {
     await expect(enviarDocumento({ ...base, arquivo: Buffer.alloc(0) })).rejects.toThrow(/vazio/i);
+  });
+});
+
+describe("enviarTexto", () => {
+  const base = {
+    instancia: "peciclo",
+    apiKey: "k",
+    baseUrl: "https://evo.exemplo.com/",
+    numero: "+55 (67) 99999-9999",
+    texto: "Cenário do dia: boi firme.",
+  };
+
+  it("envia com o path, header e corpo corretos", async () => {
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) =>
+      new Response(JSON.stringify({ key: { id: "BAE5" } }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await enviarTexto(base);
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://evo.exemplo.com/message/sendText/peciclo");
+    expect((init as RequestInit).headers).toMatchObject({ apikey: "k" });
+    const corpo = JSON.parse((init as RequestInit).body as string);
+    expect(corpo).toEqual({ number: "5567999999999", text: "Cenário do dia: boi firme." });
+  });
+
+  it("lança EvolutionApiError quando a API recusa", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ response: { message: ["número não existe no WhatsApp"] } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      }),
+    ));
+    await expect(enviarTexto(base)).rejects.toThrow(EvolutionApiError);
+  });
+
+  it("recusa texto vazio", async () => {
+    await expect(enviarTexto({ ...base, texto: "   " })).rejects.toThrow(/vazio/i);
   });
 });

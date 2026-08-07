@@ -53,6 +53,43 @@ export async function instanciaConectada(args: {
   return (json?.instance?.state ?? json?.state) === "open";
 }
 
+/** Mensagem de texto simples — usada pelo cenário diário. */
+export async function enviarTexto(params: {
+  instancia: string;
+  apiKey: string;
+  baseUrl: string;
+  numero: string;
+  texto: string;
+  timeoutMs?: number;
+}): Promise<unknown> {
+  if (!params.texto.trim()) {
+    throw new EvolutionApiError("Texto da mensagem vazio.", 0, null);
+  }
+
+  const url = `${params.baseUrl.replace(/\/+$/, "")}/message/sendText/${encodeURIComponent(params.instancia)}`;
+  const resposta = await fetch(url, {
+    method: "POST",
+    headers: { apikey: params.apiKey, "content-type": "application/json" },
+    body: JSON.stringify({
+      number: normalizarNumero(params.numero),
+      text: params.texto,
+    }),
+    signal: AbortSignal.timeout(params.timeoutMs ?? 60_000),
+  });
+
+  const tipo = resposta.headers.get("content-type") ?? "";
+  const corpo = tipo.includes("application/json") ? await resposta.json() : await resposta.text();
+
+  if (!resposta.ok) {
+    throw new EvolutionApiError(
+      extrairMensagemErro(corpo, `Evolution respondeu HTTP ${resposta.status}`),
+      resposta.status,
+      corpo,
+    );
+  }
+  return corpo;
+}
+
 export async function enviarDocumento(params: {
   instancia: string;
   apiKey: string;
