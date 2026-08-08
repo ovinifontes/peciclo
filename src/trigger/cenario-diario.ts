@@ -23,8 +23,13 @@ import { alertarOperador } from "../notificacao/alertas.js";
 import { listarTelefonesAtivos, unirDestinatarios } from "../dados/perfis.js";
 
 const MODELO = "claude-opus-5";
-const MAX_TOKENS = 1200;
-const MAX_TOKENS_RESUMO = 400; // ~700 caracteres de resumo cabem com folga
+// Folga larga de propósito: o Opus 5 raciocina antes de escrever e o
+// raciocínio CONTA no max_tokens. Com 1200, num dia de raciocínio longo a
+// resposta truncou (stop_reason=max_tokens, 08/08) e o cliente recebeu a
+// reserva. O tamanho do texto quem governa é o prompt; o teto é só
+// disjuntor — e só se paga o que for gerado, não o teto.
+const MAX_TOKENS = 8000;
+const MAX_TOKENS_RESUMO = 4000;
 
 /**
  * Cenário diário escrito por IA — roda 15 min depois da planilha completa,
