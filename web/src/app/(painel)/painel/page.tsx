@@ -7,6 +7,7 @@ import {
   type LeituraCiclo,
   type PontoCiclo,
 } from "@/lib/dados";
+import Explorador from "./explorador";
 import GraficoFemeas, { type PontoGrafico } from "./grafico-femeas";
 import TabelaMensal from "./tabela";
 
@@ -63,10 +64,25 @@ function paraPonto(p: PontoCiclo): PontoGrafico {
   };
 }
 
-export default async function Painel() {
+export default async function Painel({
+  searchParams,
+}: {
+  searchParams: Promise<{ ver?: string }>;
+}) {
   // O layout do grupo já exige cliente ativo, mas a autorização se confere em
   // cada página: um layout não roda de novo a cada navegação.
   await exigirClienteAtivo();
+  const { ver } = await searchParams;
+
+  // "2026-08" no fuso de Brasília. Calculado AQUI, no servidor, e passado como
+  // prop: `new Date()` num componente de cliente renderizado no servidor
+  // divergiria entre os dois lados (hydration mismatch). Os gráficos usam este
+  // valor para deixar o mês em coleta de fora.
+  const mesCorrente = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).format(new Date());
 
   const [{ leitura, serie, serieCiclo, precoBoi, precoBezerro }, cenario] = await Promise.all([
     obterDadosPainel(),
@@ -184,14 +200,23 @@ export default async function Painel() {
       </section>
 
       <section className="rounded-lg border bg-white p-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-          Abate mensal por estado
-        </p>
-        <p className="mt-1 mb-4 text-sm text-neutral-600">
-          O dado cru por trás de tudo acima, estado por estado e sexo por sexo — aqui{" "}
-          <strong>com o Pará</strong>, que só fica fora do consolidado do ciclo.
-        </p>
-        <TabelaMensal serie={serie} />
+        <Explorador
+          serie={serie}
+          mesCorrente={mesCorrente}
+          verInicial={ver === "graficos" ? "graficos" : "tabela"}
+          cabecalho={
+            <>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                Abate mensal por estado
+              </p>
+              <p className="mt-1 text-sm text-neutral-600">
+                O dado cru por trás de tudo acima, estado por estado e sexo por sexo — aqui{" "}
+                <strong>com o Pará</strong>, que só fica fora do consolidado do ciclo.
+              </p>
+            </>
+          }
+          tabela={<TabelaMensal serie={serie} />}
+        />
       </section>
     </div>
   );
