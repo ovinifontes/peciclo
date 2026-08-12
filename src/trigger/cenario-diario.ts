@@ -10,6 +10,7 @@ import { validarTexto } from "../ia/validacao.js";
 import { resumoReserva, textoReserva } from "../ia/reserva.js";
 import {
   sistemaCenario,
+  LIMITE_RESUMO,
   sistemaResumo,
   usuarioCenario,
   usuarioCorrecao,
@@ -162,20 +163,32 @@ async function executar(dataLocal: string) {
         usuario: usuarioResumo(dossie, texto),
         maxTokens: MAX_TOKENS_RESUMO,
       });
-      const v1 = validarTexto(primeira, dossie);
-      if (v1.ok) {
+      // Reprova por número inventado OU por tamanho — as duas coisas quebram
+      // a promessa do produto (a segunda quebrou no dia 12/08: 672 caracteres
+      // "dentro do prompt" viram uma tela inteira de celular).
+      const reprovas = (t: string): string[] => {
+        const v = validarTexto(t, dossie);
+        const lista = v.ok ? [] : [`números fora do dossiê: ${v.invalidos.join(", ")}`];
+        if (t.length > LIMITE_RESUMO) {
+          lista.push(`TAMANHO: ${t.length} caracteres (máximo ${LIMITE_RESUMO})`);
+        }
+        return lista;
+      };
+
+      const r1 = reprovas(primeira);
+      if (r1.length === 0) {
         resumo = primeira;
       } else {
-        problemas.push(`resumo: 1ª geração reprovada na validação: ${v1.invalidos.join(", ")}`);
+        problemas.push(`resumo: 1ª geração reprovada: ${r1.join("; ")}`);
         const segunda = await gerarTexto({
           modelo: MODELO,
           sistema,
-          usuario: usuarioResumoCorrecao(dossie, texto, v1.invalidos),
+          usuario: usuarioResumoCorrecao(dossie, texto, r1),
           maxTokens: MAX_TOKENS_RESUMO,
         });
-        const v2 = validarTexto(segunda, dossie);
-        if (v2.ok) resumo = segunda;
-        else problemas.push(`resumo: 2ª geração reprovada na validação: ${v2.invalidos.join(", ")}`);
+        const r2 = reprovas(segunda);
+        if (r2.length === 0) resumo = segunda;
+        else problemas.push(`resumo: 2ª geração reprovada: ${r2.join("; ")}`);
       }
     } catch (erro) {
       problemas.push(`resumo (API da Anthropic): ${erro instanceof Error ? erro.message : String(erro)}`);

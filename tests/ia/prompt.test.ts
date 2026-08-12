@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Dossie } from "../../src/ia/dossie.js";
 import { dossieParaTexto } from "../../src/ia/dossie.js";
 import {
+  LIMITE_RESUMO,
   sistemaCenario,
   sistemaResumo,
   usuarioCenario,
@@ -51,9 +52,9 @@ describe("sistemaResumo", () => {
     const s = sistemaResumo();
     expect(s).toMatch(/somente os números do dossiê/i);
     expect(s).toMatch(/recomendação de compra ou venda/i);
-    expect(s).toMatch(/6 linhas/);
-    expect(s).toMatch(/700 caracteres/);
-    expect(s).toMatch(/a decisão é sua/i); // proibida como frase de fecho
+    expect(s).toMatch(/4 linhas/);
+    expect(s).toContain(String(LIMITE_RESUMO)); // o teto duro aparece no prompt
+    expect(s).toMatch(/frase de fecho/i);
   });
 });
 
@@ -71,6 +72,7 @@ describe("usuarioResumoCorrecao", () => {
     expect(p).toContain(dossieParaTexto(dossie));
     expect(p).toContain("TEXTO COMPLETO DO DIA");
     expect(p).toContain("152.596");
-    expect(p).toMatch(/não estão no dossiê/i);
+    expect(p).toMatch(/Motivos:/);
+    expect(p).toContain(String(LIMITE_RESUMO)); // o teto vai junto na correção
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Dossie } from "../../src/ia/dossie.js";
 import { resumoReserva, textoReserva } from "../../src/ia/reserva.js";
+import { LIMITE_RESUMO } from "../../src/ia/prompt.js";
 import { validarTexto } from "../../src/ia/validacao.js";
 import type { FaseCiclo, PontoCiclo } from "../../src/ciclo/leitura.js";
 
@@ -113,12 +114,15 @@ describe("resumoReserva", () => {
     }
   });
 
-  it("cabe no WhatsApp: 3 a 4 linhas, bem menor que o texto completo", () => {
-    const texto = resumoReserva(dossieDaFase("retencao", 0.4984, -4.17));
-    const linhas = texto.split("\n").filter((l) => l.trim() !== "");
-    expect(linhas.length).toBeGreaterThanOrEqual(3);
-    expect(linhas.length).toBeLessThanOrEqual(4);
-    expect(texto.length).toBeLessThan(700);
+  it("cabe no WhatsApp: 3 a 4 linhas e dentro do teto duro, nas três fases", () => {
+    for (const fase of ["retencao", "liquidacao", "transicao"] as const) {
+      const texto = resumoReserva(dossieDaFase(fase, 0.4984, -4.17));
+      const linhas = texto.split("\n").filter((l) => l.trim() !== "");
+      expect(linhas.length).toBeGreaterThanOrEqual(3);
+      expect(linhas.length).toBeLessThanOrEqual(4);
+      // O MESMO teto que reprova a IA: a reserva não pode ser a exceção.
+      expect(texto.length).toBeLessThanOrEqual(LIMITE_RESUMO);
+    }
   });
 
   it("sem dados de mercado nem leitura, não escreve undefined, NaN ou null", () => {

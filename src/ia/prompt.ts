@@ -41,21 +41,30 @@ export function usuarioCenario(d: Dossie): string {
  * versão curta que só diz o que mudou hoje. As mesmas regras que protegem o
  * produto (nenhum número fora do dossiê, nenhuma recomendação) valem aqui.
  */
+/**
+ * Teto DURO do resumo, em caracteres. A rotina reprova resumo maior que isto
+ * (mesma escada da validação numérica: regenera uma vez, depois reserva).
+ * Racional: linha de 160 caracteres vira 4–5 linhas na tela do celular; um
+ * "resumo" de 700 caracteres ocupa a tela inteira e o dono reclamou, com
+ * razão. 450 ≈ 10–12 linhas de celular com o cabeçalho.
+ */
+export const LIMITE_RESUMO = 450;
+
 export function sistemaResumo(): string {
   return [
-    "Você é o analista do Peciclo, serviço de leitura do ciclo pecuário brasileiro. Vai condensar o cenário completo do dia em um resumo curto de WhatsApp para pecuaristas que operam o mercado futuro do boi gordo.",
+    "Você é o analista do Peciclo, serviço de leitura do ciclo pecuário brasileiro. Vai reduzir o cenário completo do dia a um aviso telegráfico de WhatsApp para pecuaristas que operam o mercado futuro do boi gordo.",
     "",
     "Regras inegociáveis:",
     "- Use SOMENTE os números do dossiê, exatamente como estão lá. Não calcule, não some, não projete nem estime nenhum número novo. Pode arredondar um valor do dossiê para menos casas decimais; nunca crie casas a mais.",
-    "- Todo dado defasado ganha a data: se a cotação não é de hoje, diga de quando é (ex.: \"cotação de 05/08\").",
+    "- Dado defasado ganha a data, curta: \"(05/08)\".",
     "- Nenhuma recomendação de compra ou venda, nem sugestão de posição.",
-    "- Nada de fato externo ao dossiê (clima, exportação, notícia, boato de mercado).",
+    "- Nada de fato externo ao dossiê (clima, exportação, notícia, boato).",
     "",
-    "O resumo:",
-    "- No MÁXIMO 6 linhas e cerca de 700 caracteres. Técnico e direto ao ponto.",
-    "- SÓ o que mudou hoje e 1 ou 2 inferências relevantes: preço do boi e variação; fase do ciclo com competência e participação de fêmeas, se relevante; algo notável da curva de futuros, SE houver algo notável.",
-    "- Sem didática, sem repetir as explicações do texto completo, sem frase de fecho (nada de \"a decisão é sua\").",
-    "- Português do Brasil direto, de quem entende de boi. Números no formato brasileiro (vírgula decimal, ponto de milhar).",
+    "Formato — é um TELEGRAMA, não um parágrafo:",
+    `- NO MÁXIMO 4 linhas e ${LIMITE_RESUMO} caracteres no total. Mire em 350.`,
+    "- Cada linha é UMA ideia, curta, frases nominais: linha do boi (preço e variação); linha do ciclo (fase, % de fêmeas, competência); linha do que mais mudou hoje OU da curva de futuros SE houver algo notável — senão, omita a linha.",
+    "- Corte tudo que é explicação: nada de \"ou seja\", nada de didática, nada de frase de fecho. O leitor tem o texto completo no site.",
+    "- Português do Brasil de quem entende de boi. Números no formato brasileiro.",
   ].join("\n");
 }
 
@@ -78,11 +87,11 @@ export function usuarioResumo(d: Dossie, completo: string): string {
 }
 
 /** Regeneração do resumo, com os tokens reprovados — espelho de `usuarioCorrecao`. */
-export function usuarioResumoCorrecao(d: Dossie, completo: string, invalidos: string[]): string {
+export function usuarioResumoCorrecao(d: Dossie, completo: string, problemas: string[]): string {
   return [
-    "Sua tentativa anterior de resumir o cenário citou números que NÃO estão no dossiê e foi reprovada pela conferência automática.",
-    `Números reprovados: ${invalidos.join("; ")}.`,
-    "Escreva o resumo novamente, do zero, usando SOMENTE números que aparecem no dossiê abaixo, exatamente como estão lá (pode arredondar para menos casas decimais; nunca crie casas a mais nem calcule valores novos).",
+    "Sua tentativa anterior de resumo foi reprovada pela conferência automática.",
+    `Motivos: ${problemas.join("; ")}.`,
+    `Escreva o resumo novamente, do zero: SOMENTE números que aparecem no dossiê abaixo (pode arredondar para menos casas; nunca crie casas a mais nem calcule valores novos), e NO MÁXIMO ${LIMITE_RESUMO} caracteres no total.`,
     "",
     "<dossie>",
     dossieParaTexto(d),
