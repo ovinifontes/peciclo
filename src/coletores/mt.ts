@@ -5,7 +5,13 @@ import { join } from "node:path";
 import type { AgregadoMensal, Janela, Sexo } from "../tipos.js";
 import { lerLinhas, textoCelula } from "../xlsx/leitor.js";
 
-const BASE = "https://sistemas.indea.mt.gov.br/FronteiraWeb";
+// Em 08/2026 o INDEA aposentou o /FronteiraWeb (503 permanente) na migração
+// para o SINDESA novo. O MESMO aplicativo de consulta continua vivo em
+// /InfoSindesa — mesmo Login.action, mesma credencial, mesmos formulários.
+// Em 12/08/2026 o export estava quebrado do lado DELES (template do relatório
+// ausente no servidor: "gtaCondensado.xlsx (No such file or directory)");
+// quando consertarem, a coleta volta sozinha, porque recoleta o mês inteiro.
+const BASE = "https://sistemas.indea.mt.gov.br/InfoSindesa";
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -89,9 +95,21 @@ export async function baixarMt(janela: Janela, cpf: string, senha: string): Prom
 
   const buffer = Buffer.from(await resposta.arrayBuffer());
 
-  // Se voltou HTML, a sessão caiu: é a tela de login. Nunca gravar isso.
-  const inicio = buffer.subarray(0, 512).toString("latin1");
+  // HTML no lugar do arquivo tem DUAS causas distintas, e confundi-las manda
+  // o operador trocar uma senha que está certa:
+  // - página com faixa de erro do próprio relatório (ex.: template ausente no
+  //   servidor novo do INDEA, 08/2026) → problema DELES, esperar conserto;
+  // - tela de login → sessão caiu ou credencial ruim de verdade.
+  // 16 KB cobre as páginas de erro vistas (9–17 KB); um XLSX de verdade
+  // começa com "PK", não casa com nada disto e segue para a assinatura ZIP.
+  const inicio = buffer.subarray(0, 16384).toString("latin1");
   if (sessaoExpirada(inicio) || inicio.trimStart().startsWith("<")) {
+    if (inicio.includes("alert-danger") || /Struts Problem Report/i.test(inicio)) {
+      throw new Error(
+        "INDEA: o relatório está quebrado no servidor deles (a página voltou com faixa de erro). " +
+          "Nada a fazer do nosso lado; a coleta volta sozinha quando consertarem.",
+      );
+    }
     throw new CredencialInvalidaError("INDEA devolveu a tela de login em vez do arquivo");
   }
   // Assinatura de ZIP (XLSX). Qualquer outra coisa é falha, não dado.
