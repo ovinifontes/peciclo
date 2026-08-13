@@ -47,7 +47,10 @@ export default function TabelaMensal({ serie }: { serie: LinhaMensal[] }) {
 
   return (
     <>
-      <div className="max-h-[26rem] overflow-auto rounded border">
+      {/* `data-exportar-expandir`: no PNG do "Exportar imagem" a rolagem
+          interna é solta (senão a foto sairia cortada em 26rem) e restaurada
+          em seguida — ver exportar.ts. */}
+      <div data-exportar-expandir className="max-h-[26rem] overflow-auto rounded border">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-neutral-50 text-xs text-neutral-500">
             <tr className="border-b">

@@ -203,7 +203,11 @@ export default async function Painel({
         <Explorador
           serie={serie}
           mesCorrente={mesCorrente}
-          verInicial={ver === "graficos" ? "graficos" : "tabela"}
+          // `graficos` é o valor antigo da URL, de quando só havia uma visão de
+          // gráficos — links e favoritos com ele caem nas Linhas.
+          verInicial={
+            ver === "colunas" ? "colunas" : ver === "linhas" || ver === "graficos" ? "linhas" : "tabela"
+          }
           cabecalho={
             <>
               <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">

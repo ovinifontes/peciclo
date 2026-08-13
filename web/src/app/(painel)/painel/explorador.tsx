@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { LinhaMensal } from "@/lib/dados";
 import { COR_UF, NOME_UF, UFS_GRAFICO, type LinhaGrafico, type UF } from "./estados";
@@ -23,13 +23,25 @@ const comSinal = new Intl.NumberFormat("pt-BR", {
 });
 
 // A mesma fronteira do grafico-femeas: o Recharts (~112 KB gzip) só é baixado
-// quando alguém abre a visão de gráficos — nunca no pacote inicial do site.
-const Grafico = dynamic(() => import("./graficos-estados-recharts"), {
+// quando alguém abre uma visão de gráficos — nunca no pacote inicial do site.
+// Linhas e Colunas são módulos irmãos de propósito: cada visão baixa só o
+// gráfico que usa, e o miolo comum do Recharts sai num chunk compartilhado.
+const GraficoLinhas = dynamic(() => import("./graficos-estados-recharts"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
+});
+const GraficoColunas = dynamic(() => import("./colunas-estados-recharts"), {
   ssr: false,
   loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
 });
 
-type Ver = "tabela" | "graficos";
+export type Ver = "tabela" | "linhas" | "colunas";
+
+const ROTULO_VER: Record<Ver, string> = {
+  tabela: "Tabela",
+  linhas: "Linhas",
+  colunas: "Colunas",
+};
 
 /** Fêmeas e machos de um estado num mês, somados da série crua. */
 interface CelulaMes {
@@ -95,6 +107,30 @@ function pctCelula(celula?: CelulaMes): number | null {
   return total > 0 ? (celula.femeas / total) * 100 : null;
 }
 
+/**
+ * Achata os meses agregados no formato do Recharts — uma linha por
+ * competência, uma coluna por UF. Serve às DUAS visões de gráfico: as Linhas
+ * recebem a série inteira, as Colunas recebem o recorte dos últimos 12 meses.
+ */
+function linhasDoGrafico(
+  meses: MesAgregado[],
+  ufs: UF[],
+  metrica: "total" | "pct",
+): LinhaGrafico[] {
+  return meses.map((m) => {
+    const linha: LinhaGrafico = { competencia: m.competencia };
+    for (const uf of ufs) {
+      if (metrica === "total") {
+        linha[uf] = totalCelula(m.porUf[uf]);
+      } else {
+        const pct = pctCelula(m.porUf[uf]);
+        linha[uf] = pct === null ? null : Number(pct.toFixed(1));
+      }
+    }
+    return linha;
+  });
+}
+
 interface Indicadores {
   /** "julho de 2026" — a competência dos números, dita em todos os cartões. */
   competencia: string | null;
@@ -142,10 +178,15 @@ function calcularIndicadores(meses: MesAgregado[], ufs: UF[]): Indicadores {
 }
 
 /**
- * A seção "Abate mensal por estado" em dois modos: a tabela de sempre
- * (server-rendered, chega pronta pela prop `tabela`) ou a visão de gráficos,
- * com filtro por estado, KPIs e duas séries por UF. O modo inicial vem de
- * `?ver=` para a visão de gráficos poder ser favoritada.
+ * A seção "Abate mensal por estado" em três modos: a tabela de sempre
+ * (server-rendered, chega pronta pela prop `tabela`), as Linhas e as Colunas
+ * — as duas visões de gráfico com o mesmo filtro por estado e os mesmos KPIs.
+ * O modo inicial vem de `?ver=` para as visões poderem ser favoritadas
+ * (`?ver=graficos`, o valor antigo, vira Linhas lá no `page.tsx`).
+ *
+ * Cada visão tem um "Exportar imagem": baixa um PNG do conteúdo com uma
+ * moldura de marca que só existe na captura — os elementos `data-so-exportar`
+ * abaixo ficam `hidden` na tela e o `exportar.ts` os revela e restaura.
  */
 export default function Explorador({
   serie,
@@ -163,6 +204,9 @@ export default function Explorador({
 }) {
   const [ver, setVer] = useState<Ver>(verInicial);
   const [ativas, setAtivas] = useState<ReadonlySet<UF>>(() => new Set(UFS_GRAFICO));
+  const [exportando, setExportando] = useState(false);
+  const [erroExportar, setErroExportar] = useState<string | null>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
 
   const meses = useMemo(() => agruparMeses(serie, mesCorrente), [serie, mesCorrente]);
 
@@ -175,29 +219,46 @@ export default function Explorador({
     ufsAtivas.some((uf) => totalCelula(m.porUf[uf]) !== null),
   );
 
-  const linhasTotal: LinhaGrafico[] = mesesVisiveis.map((m) => {
-    const linha: LinhaGrafico = { competencia: m.competencia };
-    for (const uf of ufsAtivas) linha[uf] = totalCelula(m.porUf[uf]);
-    return linha;
-  });
-  const linhasPct: LinhaGrafico[] = mesesVisiveis.map((m) => {
-    const linha: LinhaGrafico = { competencia: m.competencia };
-    for (const uf of ufsAtivas) {
-      const pct = pctCelula(m.porUf[uf]);
-      linha[uf] = pct === null ? null : Number(pct.toFixed(1));
-    }
-    return linha;
-  });
+  // 4 estados × 18+ meses em barras agrupadas seria ilegível: as Colunas
+  // mostram só os últimos 12 meses fechados, com nota. As Linhas seguem inteiras.
+  const mesesDoGrafico = ver === "colunas" ? mesesVisiveis.slice(-12) : mesesVisiveis;
+  const colunasCortadas = ver === "colunas" && mesesVisiveis.length > mesesDoGrafico.length;
+
+  const linhasTotal = linhasDoGrafico(mesesDoGrafico, ufsAtivas, "total");
+  const linhasPct = linhasDoGrafico(mesesDoGrafico, ufsAtivas, "pct");
+
+  // As duas visões de gráfico têm a mesma casca (filtro, KPIs, títulos, notas);
+  // só o desenho muda — linhas contínuas ou barras agrupadas.
+  const CorpoGrafico = ver === "colunas" ? GraficoColunas : GraficoLinhas;
 
   const ind = calcularIndicadores(meses, ufsAtivas);
 
   function mudarVer(novo: Ver) {
     setVer(novo);
-    // `?ver=graficos` sobrevive a recarga e a favorito; a URL limpa é a tabela.
+    // `?ver=linhas`/`?ver=colunas` sobrevivem a recarga e a favorito; a URL
+    // limpa é a tabela.
     const url = new URL(window.location.href);
-    if (novo === "graficos") url.searchParams.set("ver", "graficos");
-    else url.searchParams.delete("ver");
+    if (novo === "tabela") url.searchParams.delete("ver");
+    else url.searchParams.set("ver", novo);
     window.history.replaceState(null, "", url);
+  }
+
+  async function exportar() {
+    const no = areaRef.current;
+    if (!no || exportando) return;
+    setExportando(true);
+    setErroExportar(null);
+    try {
+      // Import dinâmico no clique: nem o exportar.ts, nem o html-to-image que
+      // ele importa por dentro, entram no JavaScript inicial da página.
+      const { exportarPng } = await import("./exportar");
+      await exportarPng(no, ver);
+    } catch {
+      // Recado curto; a tela nunca quebra por causa de um export.
+      setErroExportar("Não deu para gerar a imagem — tente de novo.");
+    } finally {
+      setExportando(false);
+    }
   }
 
   function alternarUf(uf: UF) {
@@ -214,30 +275,80 @@ export default function Explorador({
     <>
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 basis-64">{cabecalho}</div>
-        <div
-          role="group"
-          aria-label="Modo de visualização"
-          className="inline-flex shrink-0 overflow-hidden rounded-full border"
-        >
-          {(["tabela", "graficos"] as const).map((opcao) => (
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <div
+            role="group"
+            aria-label="Modo de visualização"
+            className="inline-flex overflow-hidden rounded-full border"
+          >
+            {(["tabela", "linhas", "colunas"] as const).map((opcao) => (
+              <button
+                key={opcao}
+                type="button"
+                aria-pressed={ver === opcao}
+                onClick={() => mudarVer(opcao)}
+                className={`px-4 py-1.5 text-xs font-medium uppercase tracking-[0.12em] transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ouro)] ${
+                  ver === opcao
+                    ? "bg-[var(--verde)] text-white"
+                    : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800"
+                }`}
+              >
+                {ROTULO_VER[opcao]}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            {erroExportar && (
+              <span role="alert" className="text-xs text-[#93402c]">
+                {erroExportar}
+              </span>
+            )}
             <button
-              key={opcao}
               type="button"
-              aria-pressed={ver === opcao}
-              onClick={() => mudarVer(opcao)}
-              className={`px-4 py-1.5 text-xs font-medium uppercase tracking-[0.12em] transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ouro)] ${
-                ver === opcao
-                  ? "bg-[var(--verde)] text-white"
-                  : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800"
-              }`}
+              onClick={exportar}
+              disabled={exportando}
+              className="text-xs text-neutral-500 underline underline-offset-2 transition-colors hover:text-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ouro)] disabled:cursor-wait disabled:no-underline"
             >
-              {opcao === "tabela" ? "Tabela" : "Gráficos"}
+              {exportando ? "gerando…" : "Exportar imagem"}
             </button>
-          ))}
+          </div>
         </div>
       </div>
 
-      <div className="mt-4">
+      {/* Tudo dentro deste contêiner sai no PNG — inclusive a moldura de marca,
+          que na tela fica `hidden` e só é revelada durante a captura. */}
+      <div ref={areaRef} className="mt-4">
+        <div data-so-exportar hidden>
+          <div className="mb-4 flex items-center justify-between gap-4 border-b pb-3">
+            <div className="flex items-center gap-2.5">
+              {/* O mostrador do ciclo, parado — o mesmo da tela de entrada. */}
+              <svg aria-hidden className="h-9 w-9" viewBox="0 0 64 64" fill="none">
+                <circle cx="32" cy="32" r="30" stroke="var(--verde)" strokeWidth="2" />
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="24"
+                  stroke="var(--verde)"
+                  strokeOpacity="0.45"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeDasharray="0.1 12.466"
+                />
+                <circle cx="32" cy="8" r="3.2" fill="var(--ouro)" />
+                <circle cx="32" cy="32" r="2" fill="var(--verde)" />
+              </svg>
+              <div>
+                <p className="text-base leading-tight font-semibold text-[var(--verde)]">
+                  Peciclo
+                </p>
+                <p className="text-[11px] tracking-[0.18em] text-neutral-500 uppercase">
+                  Abate mensal por estado
+                </p>
+              </div>
+            </div>
+            <p data-exportar-data className="text-xs text-neutral-500" />
+          </div>
+        </div>
         {ver === "tabela" ? (
           tabela
         ) : (
@@ -302,8 +413,13 @@ export default function Explorador({
 
                 <div>
                   <h3 className="text-sm font-medium text-neutral-800">Cabeças abatidas por mês</h3>
+                  {colunasCortadas && (
+                    <p className="mt-0.5 text-xs text-neutral-500">
+                      Últimos 12 meses — a visão Linhas mostra a série inteira.
+                    </p>
+                  )}
                   <div className="mt-2 h-[280px] w-full">
-                    <Grafico ufs={ufsAtivas} linhas={linhasTotal} unidade="cabecas" />
+                    <CorpoGrafico ufs={ufsAtivas} linhas={linhasTotal} unidade="cabecas" />
                   </div>
                 </div>
 
@@ -315,22 +431,29 @@ export default function Explorador({
                     Acima da linha de 50%, abatem-se mais fêmeas que machos.
                   </p>
                   <div className="mt-2 h-[280px] w-full">
-                    <Grafico ufs={ufsAtivas} linhas={linhasPct} unidade="pct" />
+                    <CorpoGrafico ufs={ufsAtivas} linhas={linhasPct} unidade="pct" />
                   </div>
                 </div>
 
                 <p className="text-xs leading-relaxed text-neutral-500">
                   Dois recortes de honestidade: o mês corrente ({mesLongo(mesCorrente)}) fica fora
                   dos gráficos e dos indicadores — ainda está em coleta, e o parcial desenharia uma
-                  queda que não existe —, e cada linha termina no último mês que o estado publicou
-                  (o PA costuma ficar uns dois meses atrás dos demais). Os indicadores usam o
-                  último mês fechado por <strong>todos</strong> os estados selecionados, indicado
-                  nos cartões. O parcial do mês corrente está na Tabela.
+                  queda que não existe —, e cada estado aparece até o último mês que publicou: nas
+                  Linhas a série termina ali; nas Colunas, mês sem dado fica sem barra (o PA
+                  costuma ficar uns dois meses atrás dos demais). Os indicadores usam o último mês
+                  fechado por <strong>todos</strong> os estados selecionados, indicado nos cartões.
+                  O parcial do mês corrente está na Tabela.
                 </p>
               </>
             )}
           </div>
         )}
+
+        <div data-so-exportar hidden>
+          <p className="mt-4 border-t pt-2 text-center text-[11px] tracking-[0.18em] text-neutral-400">
+            peciclo.com.br
+          </p>
+        </div>
       </div>
     </>
   );
