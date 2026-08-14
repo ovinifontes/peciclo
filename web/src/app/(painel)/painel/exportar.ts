@@ -37,7 +37,7 @@ export function dataPorExtenso(agora: Date): string {
 export const MARGEM_CAPTURA = 24;
 
 export async function exportarPng(no: HTMLElement, visao: string): Promise<void> {
-  const { toPng } = await import("html-to-image");
+  const { toBlob } = await import("html-to-image");
   const agora = new Date();
 
   const moldura = Array.from(no.querySelectorAll<HTMLElement>("[data-so-exportar]"));
@@ -57,16 +57,21 @@ export async function exportarPng(no: HTMLElement, visao: string): Promise<void>
     // A margem entra só no CLONE que o html-to-image desenha, via `style` +
     // largura/altura do canvas — o nó da tela não sofre reflow nenhum (os
     // gráficos remedem o contêiner quando a largura muda; aqui ela não muda).
+    //
+    // Blob, NUNCA data URL: um PNG 2x de seção inteira passa fácil de 2 MB, e
+    // navegador de celular aceita o aviso de download de data URL e descarta o
+    // arquivo em silêncio (foi exatamente o bug relatado em 14/08).
     const rect = no.getBoundingClientRect();
-    const dataUrl = await toPng(no, {
+    const blob = await toBlob(no, {
       pixelRatio: 2,
       backgroundColor: "#ffffff",
       width: Math.ceil(rect.width) + MARGEM_CAPTURA * 2,
       height: Math.ceil(rect.height) + MARGEM_CAPTURA * 2,
       style: { margin: `${MARGEM_CAPTURA}px` },
     });
+    if (!blob) throw new Error("captura vazia");
 
-    baixar(dataUrl, nomeArquivo(visao, agora));
+    baixar(blob, nomeArquivo(visao, agora));
   } finally {
     for (const el of moldura) el.hidden = true;
     if (dataEl) dataEl.textContent = "";
@@ -77,15 +82,16 @@ export async function exportarPng(no: HTMLElement, visao: string): Promise<void>
   }
 }
 
-function baixar(dataUrl: string, nome: string): void {
+function baixar(blob: Blob, nome: string): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  // iOS Safari antigo não respeita `download=`; abrir numa aba é o plano B —
-  // de lá dá para segurar e salvar a imagem.
-  if ("download" in a) {
-    a.href = dataUrl;
-    a.download = nome;
-    a.click();
-  } else {
-    window.open(dataUrl, "_blank");
-  }
+  a.href = url;
+  a.download = nome;
+  // No DOM antes do clique: iOS Safari e Firefox ignoram cliques em âncora
+  // solta. E o revoke espera um minuto — revogar cedo demais corta o save
+  // do iOS no meio.
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
