@@ -45,10 +45,13 @@ export default function ColunasEstadosRecharts({
   ufs,
   linhas,
   unidade,
+  animar = true,
 }: {
   ufs: UF[];
   linhas: LinhaGrafico[];
   unidade: "cabecas" | "pct";
+  /** `false` no cartão de exportação — a foto pegaria a barra no meio. */
+  animar?: boolean;
 }) {
   const ehPct = unidade === "pct";
   return (
@@ -94,7 +97,7 @@ export default function ColunasEstadosRecharts({
             fill={COR_UF[uf]}
             maxBarSize={24}
             radius={[4, 4, 0, 0]}
-            isAnimationActive={false}
+            isAnimationActive={animar}
           />
         ))}
       </BarChart>

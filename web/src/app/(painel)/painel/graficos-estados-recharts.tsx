@@ -38,10 +38,13 @@ export default function GraficoEstadosRecharts({
   ufs,
   linhas,
   unidade,
+  animar = true,
 }: {
   ufs: UF[];
   linhas: LinhaGrafico[];
   unidade: "cabecas" | "pct";
+  /** `false` no cartão de exportação — a foto pegaria o traço no meio. */
+  animar?: boolean;
 }) {
   const ehPct = unidade === "pct";
   return (
@@ -97,7 +100,7 @@ export default function GraficoEstadosRecharts({
             dot={{ r: 2, fill: COR_UF[uf], strokeWidth: 0 }}
             activeDot={{ r: 4 }}
             connectNulls={false}
-            isAnimationActive={false}
+            isAnimationActive={animar}
           />
         ))}
       </LineChart>

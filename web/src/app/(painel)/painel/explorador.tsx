@@ -1,10 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 
 import type { LinhaMensal } from "@/lib/dados";
 import { COR_UF, NOME_UF, UFS_GRAFICO, type LinhaGrafico, type UF } from "./estados";
+import Exportavel from "./exportavel";
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -184,9 +185,11 @@ function calcularIndicadores(meses: MesAgregado[], ufs: UF[]): Indicadores {
  * O modo inicial vem de `?ver=` para as visões poderem ser favoritadas
  * (`?ver=graficos`, o valor antigo, vira Linhas lá no `page.tsx`).
  *
- * Cada visão tem um "Exportar imagem": baixa um PNG do conteúdo com uma
- * moldura de marca que só existe na captura — os elementos `data-so-exportar`
- * abaixo ficam `hidden` na tela e o `exportar.ts` os revela e restaura.
+ * Cada visão tem um "Exportar imagem": baixa um PNG SEMPRE em leiaute de
+ * desktop (1080px), em qualquer aparelho — o clique monta o cartão do
+ * `exportavel.tsx` fora da tela com a visão corrente, espera o Recharts medir
+ * e desenhar, e o `exportar.ts` fotografa o CARTÃO, nunca o nó visível (que
+ * no celular está estreito e sairia com o leiaute errado).
  */
 export default function Explorador({
   serie,
@@ -206,7 +209,7 @@ export default function Explorador({
   const [ativas, setAtivas] = useState<ReadonlySet<UF>>(() => new Set(UFS_GRAFICO));
   const [exportando, setExportando] = useState(false);
   const [erroExportar, setErroExportar] = useState<string | null>(null);
-  const areaRef = useRef<HTMLDivElement>(null);
+  const exportavelRef = useRef<HTMLDivElement>(null);
 
   const meses = useMemo(() => agruparMeses(serie, mesCorrente), [serie, mesCorrente]);
 
@@ -244,19 +247,32 @@ export default function Explorador({
   }
 
   async function exportar() {
-    const no = areaRef.current;
-    if (!no || exportando) return;
+    if (exportando) return;
+    // `exportando` faz duas coisas: vira o botão para "gerando…" e monta o
+    // cartão do `exportavel.tsx` fora da tela (o `{cartao && ...}` lá embaixo).
     setExportando(true);
     setErroExportar(null);
     try {
-      // Import dinâmico no clique: nem o exportar.ts, nem o html-to-image que
-      // ele importa por dentro, entram no JavaScript inicial da página.
+      // Import dinâmico no clique: o html-to-image, que o exportar.ts importa
+      // por dentro, nunca entra no JavaScript inicial da página.
       const { exportarPng } = await import("./exportar");
+      // Espera a renderização REAL do cartão: dois requestAnimationFrame
+      // garantem o commit do React e o primeiro paint; os ~450ms dão tempo ao
+      // ResponsiveContainer do Recharts, que mede o contêiner de forma
+      // assíncrona antes de desenhar o SVG nos 1080px.
+      await new Promise<void>((resolver) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => setTimeout(resolver, 450));
+        });
+      });
+      const no = exportavelRef.current;
+      if (!no) throw new Error("cartão de exportação não montou");
       await exportarPng(no, ver);
     } catch {
       // Recado curto; a tela nunca quebra por causa de um export.
       setErroExportar("Não deu para gerar a imagem — tente de novo.");
     } finally {
+      // Desmonta o cartão mesmo quando a captura falha.
       setExportando(false);
     }
   }
@@ -270,6 +286,16 @@ export default function Explorador({
       return novas;
     });
   }
+
+  // Legenda e KPIs do cartão de exportação. Nos gráficos, os estados
+  // filtrados; na tabela — que mostra sempre os quatro —, os quatro: um filtro
+  // invisível herdado dos gráficos mentiria sobre o conteúdo da foto.
+  const ufsTabela = [...UFS_GRAFICO];
+  const cartao = exportando
+    ? ver === "tabela"
+      ? { ufs: ufsTabela, ind: calcularIndicadores(meses, ufsTabela) }
+      : { ufs: ufsAtivas, ind }
+    : null;
 
   return (
     <>
@@ -315,40 +341,7 @@ export default function Explorador({
         </div>
       </div>
 
-      {/* Tudo dentro deste contêiner sai no PNG — inclusive a moldura de marca,
-          que na tela fica `hidden` e só é revelada durante a captura. */}
-      <div ref={areaRef} className="mt-4">
-        <div data-so-exportar hidden>
-          <div className="mb-4 flex items-center justify-between gap-4 border-b pb-3">
-            <div className="flex items-center gap-2.5">
-              {/* O mostrador do ciclo, parado — o mesmo da tela de entrada. */}
-              <svg aria-hidden className="h-9 w-9" viewBox="0 0 64 64" fill="none">
-                <circle cx="32" cy="32" r="30" stroke="var(--verde)" strokeWidth="2" />
-                <circle
-                  cx="32"
-                  cy="32"
-                  r="24"
-                  stroke="var(--verde)"
-                  strokeOpacity="0.45"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeDasharray="0.1 12.466"
-                />
-                <circle cx="32" cy="8" r="3.2" fill="var(--ouro)" />
-                <circle cx="32" cy="32" r="2" fill="var(--verde)" />
-              </svg>
-              <div>
-                <p className="text-base leading-tight font-semibold text-[var(--verde)]">
-                  Peciclo
-                </p>
-                <p className="text-[11px] tracking-[0.18em] text-neutral-500 uppercase">
-                  Abate mensal por estado
-                </p>
-              </div>
-            </div>
-            <p data-exportar-data className="text-xs text-neutral-500" />
-          </div>
-        </div>
+      <div className="mt-4">
         {ver === "tabela" ? (
           tabela
         ) : (
@@ -388,73 +381,48 @@ export default function Explorador({
               </p>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  <Kpi
-                    rotulo="Cabeças abatidas"
-                    valor={ind.total !== null ? inteiro.format(ind.total) : "—"}
-                    nota={ind.competencia ?? "sem mês fechado por todos"}
-                  />
-                  <Kpi
-                    rotulo="Fêmeas no abate"
-                    valor={ind.pct !== null ? `${umaCasa.format(ind.pct)}%` : "—"}
-                    nota={ind.competencia ?? "sem mês fechado por todos"}
-                  />
-                  <Kpi
-                    rotulo="Total vs ano anterior"
-                    valor={ind.varTotal !== null ? `${comSinal.format(ind.varTotal)}%` : "—"}
-                    nota={ind.mesBase ? `vs ${ind.mesBase}` : "sem o mesmo mês do ano anterior"}
-                  />
-                  <Kpi
-                    rotulo="Fêmeas vs ano anterior"
-                    valor={ind.varPct !== null ? `${comSinal.format(ind.varPct)} p.p.` : "—"}
-                    nota={ind.mesBase ? `vs ${ind.mesBase}` : "sem o mesmo mês do ano anterior"}
-                  />
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-medium text-neutral-800">Cabeças abatidas por mês</h3>
-                  {colunasCortadas && (
-                    <p className="mt-0.5 text-xs text-neutral-500">
-                      Últimos 12 meses — a visão Linhas mostra a série inteira.
-                    </p>
-                  )}
-                  <div className="mt-2 h-[280px] w-full">
-                    <CorpoGrafico ufs={ufsAtivas} linhas={linhasTotal} unidade="cabecas" />
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-medium text-neutral-800">
-                    Participação de fêmeas no abate
-                  </h3>
-                  <p className="mt-0.5 text-xs text-neutral-500">
-                    Acima da linha de 50%, abatem-se mais fêmeas que machos.
-                  </p>
-                  <div className="mt-2 h-[280px] w-full">
-                    <CorpoGrafico ufs={ufsAtivas} linhas={linhasPct} unidade="pct" />
-                  </div>
-                </div>
-
-                <p className="text-xs leading-relaxed text-neutral-500">
-                  Dois recortes de honestidade: o mês corrente ({mesLongo(mesCorrente)}) fica fora
-                  dos gráficos e dos indicadores — ainda está em coleta, e o parcial desenharia uma
-                  queda que não existe —, e cada estado aparece até o último mês que publicou: nas
-                  Linhas a série termina ali; nas Colunas, mês sem dado fica sem barra (o PA
-                  costuma ficar uns dois meses atrás dos demais). Os indicadores usam o último mês
-                  fechado por <strong>todos</strong> os estados selecionados, indicado nos cartões.
-                  O parcial do mês corrente está na Tabela.
-                </p>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{cartoesKpi(ind)}</div>
+                <SecoesGrafico
+                  Corpo={CorpoGrafico}
+                  ufs={ufsAtivas}
+                  linhasTotal={linhasTotal}
+                  linhasPct={linhasPct}
+                  cortadas={colunasCortadas}
+                  mesCorrente={mesCorrente}
+                />
               </>
             )}
           </div>
         )}
-
-        <div data-so-exportar hidden>
-          <p className="mt-4 border-t pt-2 text-center text-[11px] tracking-[0.18em] text-neutral-400">
-            peciclo.com.br
-          </p>
-        </div>
       </div>
+
+      {/* O cartão de exportação: só existe durante o clique em Exportar, fora
+          da tela, com a MESMA visão e os MESMOS dados — é ele que vira PNG. */}
+      {cartao && (
+        <Exportavel
+          ref={exportavelRef}
+          rotulo={ROTULO_VER[ver]}
+          ufs={cartao.ufs}
+          kpis={cartoesKpi(cartao.ind)}
+        >
+          {ver === "tabela" ? (
+            tabela
+          ) : mesesVisiveis.length === 0 ? (
+            <p className="text-sm text-neutral-600">
+              Nenhum mês fechado para os estados selecionados — nada para desenhar ainda.
+            </p>
+          ) : (
+            <SecoesGrafico
+              Corpo={CorpoGrafico}
+              ufs={ufsAtivas}
+              linhasTotal={linhasTotal}
+              linhasPct={linhasPct}
+              cortadas={colunasCortadas}
+              mesCorrente={mesCorrente}
+            />
+          )}
+        </Exportavel>
+      )}
     </>
   );
 }
@@ -466,5 +434,105 @@ function Kpi({ rotulo, valor, nota }: { rotulo: string; valor: string; nota: str
       <p className="mt-0.5 text-xl font-semibold text-neutral-900">{valor}</p>
       <p className="mt-0.5 text-xs text-neutral-400">{nota}</p>
     </div>
+  );
+}
+
+/**
+ * Os quatro cartões de KPI, sem a grade em volta — a tela os põe numa grade
+ * responsiva (2×2 no celular), o cartão de exportação numa linha fixa de 4.
+ */
+function cartoesKpi(ind: Indicadores): ReactNode {
+  return (
+    <>
+      <Kpi
+        rotulo="Cabeças abatidas"
+        valor={ind.total !== null ? inteiro.format(ind.total) : "—"}
+        nota={ind.competencia ?? "sem mês fechado por todos"}
+      />
+      <Kpi
+        rotulo="Fêmeas no abate"
+        valor={ind.pct !== null ? `${umaCasa.format(ind.pct)}%` : "—"}
+        nota={ind.competencia ?? "sem mês fechado por todos"}
+      />
+      <Kpi
+        rotulo="Total vs ano anterior"
+        valor={ind.varTotal !== null ? `${comSinal.format(ind.varTotal)}%` : "—"}
+        nota={ind.mesBase ? `vs ${ind.mesBase}` : "sem o mesmo mês do ano anterior"}
+      />
+      <Kpi
+        rotulo="Fêmeas vs ano anterior"
+        valor={ind.varPct !== null ? `${comSinal.format(ind.varPct)} p.p.` : "—"}
+        nota={ind.mesBase ? `vs ${ind.mesBase}` : "sem o mesmo mês do ano anterior"}
+      />
+    </>
+  );
+}
+
+/** As props que os módulos Linhas e Colunas compartilham. */
+interface PropsCorpoGrafico {
+  ufs: UF[];
+  linhas: LinhaGrafico[];
+  unidade: "cabecas" | "pct";
+  animar?: boolean;
+}
+
+/**
+ * Os dois gráficos da visão corrente (total e participação de fêmeas) com a
+ * nota de método — o MESMO markup na tela e no cartão de exportação, para os
+ * dois nunca divergirem. `animar={false}` nos dois lugares: na tela a casa
+ * sempre desenhou sem animação, e no cartão é obrigatório — a foto pegaria o
+ * traço no meio do caminho.
+ */
+function SecoesGrafico({
+  Corpo,
+  ufs,
+  linhasTotal,
+  linhasPct,
+  cortadas,
+  mesCorrente,
+}: {
+  Corpo: ComponentType<PropsCorpoGrafico>;
+  ufs: UF[];
+  linhasTotal: LinhaGrafico[];
+  linhasPct: LinhaGrafico[];
+  cortadas: boolean;
+  mesCorrente: string;
+}) {
+  return (
+    <>
+      <div>
+        <h3 className="text-sm font-medium text-neutral-800">Cabeças abatidas por mês</h3>
+        {cortadas && (
+          <p className="mt-0.5 text-xs text-neutral-500">
+            Últimos 12 meses — a visão Linhas mostra a série inteira.
+          </p>
+        )}
+        <div className="mt-2 h-[280px] w-full">
+          <Corpo ufs={ufs} linhas={linhasTotal} unidade="cabecas" animar={false} />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium text-neutral-800">
+          Participação de fêmeas no abate
+        </h3>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          Acima da linha de 50%, abatem-se mais fêmeas que machos.
+        </p>
+        <div className="mt-2 h-[280px] w-full">
+          <Corpo ufs={ufs} linhas={linhasPct} unidade="pct" animar={false} />
+        </div>
+      </div>
+
+      <p className="text-xs leading-relaxed text-neutral-500">
+        Dois recortes de honestidade: o mês corrente ({mesLongo(mesCorrente)}) fica fora
+        dos gráficos e dos indicadores — ainda está em coleta, e o parcial desenharia uma
+        queda que não existe —, e cada estado aparece até o último mês que publicou: nas
+        Linhas a série termina ali; nas Colunas, mês sem dado fica sem barra (o PA
+        costuma ficar uns dois meses atrás dos demais). Os indicadores usam o último mês
+        fechado por <strong>todos</strong> os estados selecionados, indicado nos cartões.
+        O parcial do mês corrente está na Tabela.
+      </p>
+    </>
   );
 }

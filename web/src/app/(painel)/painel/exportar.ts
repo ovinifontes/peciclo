@@ -1,15 +1,16 @@
 /**
- * Exporta uma seção do painel como PNG — para o dono mandar por WhatsApp.
+ * Exporta o cartão de exportação como PNG — para o dono mandar por WhatsApp.
  *
  * O `html-to-image` (~11 KB gzip) só é baixado no PRIMEIRO clique em
  * "Exportar imagem": o `await import(...)` lá embaixo é a fronteira, como a
- * do Recharts — nada disto encosta no pacote inicial do site.
+ * do Recharts — nada dele encosta no pacote inicial do site.
  *
- * A moldura de marca (mostrador + "Peciclo" + data no alto, "peciclo.com.br"
- * no rodapé) já existe no DOM com `hidden`, dentro do contêiner capturado. A
- * captura revela esses elementos, expande contêineres com rolagem interna
- * (senão a tabela sairia cortada na altura da janela) e restaura tudo num
- * `finally` — a tela volta ao normal mesmo quando a captura falha.
+ * Quem chega aqui é o nó do `exportavel.tsx`: a cópia da visão em 1080px de
+ * largura, montada fora da tela já com a moldura de marca, tudo visível e sem
+ * rolagem interna — por isso não existe mais nada para revelar, expandir nem
+ * restaurar em volta da foto. A única correção necessária é no CLONE que o
+ * html-to-image desenha: ele copia o computed style do nó, e um clone com
+ * `position:fixed; left:-99999px` sairia do quadro — PNG em branco.
  */
 
 /** Nome do arquivo baixado: `peciclo-colunas-2026-08-12.png`. */
@@ -40,46 +41,28 @@ export async function exportarPng(no: HTMLElement, visao: string): Promise<void>
   const { toBlob } = await import("html-to-image");
   const agora = new Date();
 
-  const moldura = Array.from(no.querySelectorAll<HTMLElement>("[data-so-exportar]"));
-  const dataEl = no.querySelector<HTMLElement>("[data-exportar-data]");
-  const soltos = Array.from(no.querySelectorAll<HTMLElement>("[data-exportar-expandir]")).map(
-    (el) => ({ el, maxHeight: el.style.maxHeight, overflow: el.style.overflow }),
-  );
+  // A margem e o reset de posição entram só no CLONE, via `style` — o nó real
+  // continua parado fora da tela, sem reflow nenhum.
+  //
+  // Blob, NUNCA data URL: um PNG 2x de seção inteira passa fácil de 2 MB, e
+  // navegador de celular aceita o aviso de download de data URL e descarta o
+  // arquivo em silêncio (foi exatamente o bug relatado em 14/08).
+  const rect = no.getBoundingClientRect();
+  const blob = await toBlob(no, {
+    pixelRatio: 2,
+    backgroundColor: "#ffffff",
+    width: Math.ceil(rect.width) + MARGEM_CAPTURA * 2,
+    height: Math.ceil(rect.height) + MARGEM_CAPTURA * 2,
+    style: {
+      position: "static",
+      left: "0",
+      top: "0",
+      margin: `${MARGEM_CAPTURA}px`,
+    },
+  });
+  if (!blob) throw new Error("captura vazia");
 
-  try {
-    for (const el of moldura) el.hidden = false;
-    if (dataEl) dataEl.textContent = dataPorExtenso(agora);
-    for (const { el } of soltos) {
-      el.style.maxHeight = "none";
-      el.style.overflow = "visible";
-    }
-
-    // A margem entra só no CLONE que o html-to-image desenha, via `style` +
-    // largura/altura do canvas — o nó da tela não sofre reflow nenhum (os
-    // gráficos remedem o contêiner quando a largura muda; aqui ela não muda).
-    //
-    // Blob, NUNCA data URL: um PNG 2x de seção inteira passa fácil de 2 MB, e
-    // navegador de celular aceita o aviso de download de data URL e descarta o
-    // arquivo em silêncio (foi exatamente o bug relatado em 14/08).
-    const rect = no.getBoundingClientRect();
-    const blob = await toBlob(no, {
-      pixelRatio: 2,
-      backgroundColor: "#ffffff",
-      width: Math.ceil(rect.width) + MARGEM_CAPTURA * 2,
-      height: Math.ceil(rect.height) + MARGEM_CAPTURA * 2,
-      style: { margin: `${MARGEM_CAPTURA}px` },
-    });
-    if (!blob) throw new Error("captura vazia");
-
-    baixar(blob, nomeArquivo(visao, agora));
-  } finally {
-    for (const el of moldura) el.hidden = true;
-    if (dataEl) dataEl.textContent = "";
-    for (const { el, maxHeight, overflow } of soltos) {
-      el.style.maxHeight = maxHeight;
-      el.style.overflow = overflow;
-    }
-  }
+  baixar(blob, nomeArquivo(visao, agora));
 }
 
 function baixar(blob: Blob, nome: string): void {
