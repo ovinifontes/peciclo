@@ -24,12 +24,15 @@ import { dataPorExtenso } from "./exportar";
  */
 export default function Exportavel({
   ref,
+  titulo = "Abate mensal por estado",
   rotulo,
   ufs,
   kpis,
   children,
 }: {
   ref: Ref<HTMLDivElement>;
+  /** Título da seção fotografada — a diária passa o dela; o padrão é o mensal. */
+  titulo?: string;
   /** Rótulo da visão corrente: "Tabela", "Linhas" ou "Colunas". */
   rotulo: string;
   /** Estados da legenda — os filtrados nos gráficos, os quatro na tabela. */
@@ -69,7 +72,7 @@ export default function Exportavel({
               Peciclo
             </p>
             <p className="text-[11px] tracking-[0.18em] text-neutral-500 uppercase">
-              Abate mensal por estado · {rotulo}
+              {titulo} · {rotulo}
             </p>
           </div>
         </div>

@@ -15,6 +15,21 @@ import {
   type PontoCiclo,
 } from "../../../src/ciclo/leitura";
 import { lerTudo } from "../../../src/dados/paginar";
+// A série diária vem da MESMA lógica pura que a suíte da raiz testa: agrupar
+// por dia, média móvel de 7 e KPIs vivem em `diario/serie.ts` (que importa só
+// `tipos.ts`) — recalcular qualquer pedaço aqui criaria duas verdades sobre a
+// MM7. Este módulo reexporta o que os componentes de SERVIDOR precisam; o
+// explorador diário (cliente) importa `diario/serie` direto, porque este
+// arquivo é server-only.
+import {
+  agruparDias,
+  diaSemana,
+  rotuloDia,
+  serieComMm7,
+  ufsComDado,
+  type DiaUf,
+  type PontoDiario,
+} from "../../../src/diario/serie";
 // O dossiê é o MESMO que a rotina do cenário usa: o chat e o texto diário
 // enxergam o dia pelo mesmo retrato, montado pela mesma função testada na
 // suíte da raiz. `dossie.ts` é puro (só importa de `ciclo/leitura`), então a
@@ -28,10 +43,10 @@ import {
 // De `tipos`, não de `dados/mensal`: aquele módulo importa o cliente do
 // Supabase da RAIZ, que não é instalado no build da Vercel (só `web/` roda
 // npm install). `tipos.ts` não importa nada — é a fronteira segura.
-import type { LinhaMensal } from "../../../src/tipos";
+import type { LinhaDiaria, LinhaMensal } from "../../../src/tipos";
 
-export { PAINEL_CICLO };
-export type { LeituraCiclo, LinhaMensal, PontoCiclo };
+export { agruparDias, diaSemana, PAINEL_CICLO, rotuloDia, serieComMm7, ufsComDado };
+export type { DiaUf, LeituraCiclo, LinhaDiaria, LinhaMensal, PontoCiclo, PontoDiario };
 
 export interface Preco {
   valor: number;
@@ -70,6 +85,53 @@ async function lerAbateMensal(): Promise<LinhaMensal[]> {
         .order("mes")
         .range(de, ate),
     "abate mensal",
+  );
+}
+
+/** "2026-08-18" no fuso de Brasília — o dia do CLIENTE, não o UTC da Vercel. */
+export function hojeSaoPaulo(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+/** ISO `dias` dias antes de `iso`, por aritmética UTC (imune a DST). */
+export function diasAntes(iso: string, dias: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - dias);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Dias lidos do diário: 180 do gráfico + 6 que a MM7 do 1º ponto olha + folga. */
+const DIAS_LEITURA_DIARIA = 200;
+
+/**
+ * Abate diário visível para o usuário logado (RLS decide o que volta).
+ *
+ * O dia de HOJE nunca chega ao navegador (`.lt`): está sempre em coleta, e um
+ * parcial de meio-dia desenharia um tombo que não existe — o mesmo motivo de o
+ * mês corrente ficar fora dos gráficos mensais. `lerTudo` é obrigatório: 200
+ * dias × até 4 UFs × 2 sexos passa das 1000 linhas em que o Supabase corta SEM
+ * erro, e o que sumiria seriam justamente os dias recentes.
+ */
+export async function lerAbateDiario(): Promise<LinhaDiaria[]> {
+  const supabase = await createClient();
+  const hoje = hojeSaoPaulo();
+  const corte = diasAntes(hoje, DIAS_LEITURA_DIARIA);
+  return lerTudo<LinhaDiaria>(
+    (de, ate) =>
+      supabase
+        .from("peciclo_abate_diario")
+        .select("uf, data, sexo, quantidade")
+        // Igualdade exata, nunca prefixo — a mesma regra do mensal: "ABATE
+        // SANITÁRIO" e "SACRIFÍCIO" não são decisão do pecuarista.
+        .eq("finalidade", "ABATE")
+        .gte("data", corte)
+        .lt("data", hoje)
+        // Ordem total (data, uf, sexo): páginas do lerTudo nunca se sobrepõem.
+        .order("data")
+        .order("uf")
+        .order("sexo")
+        .range(de, ate),
+    "abate diário",
   );
 }
 

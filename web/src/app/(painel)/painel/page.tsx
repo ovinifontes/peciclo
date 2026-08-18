@@ -1,15 +1,22 @@
 import { exigirClienteAtivo } from "@/lib/dal";
 import {
+  agruparDias,
+  diasAntes,
+  hojeSaoPaulo,
+  lerAbateDiario,
   lerCenarioMaisRecente,
   obterDadosPainel,
   PAINEL_CICLO,
+  serieComMm7,
   type Cenario,
   type LeituraCiclo,
   type PontoCiclo,
 } from "@/lib/dados";
 import Explorador from "./explorador";
+import ExploradorDiario from "./explorador-diario";
 import GraficoFemeas, { type PontoGrafico } from "./grafico-femeas";
 import TabelaMensal from "./tabela";
+import TabelaDiaria from "./tabela-diaria";
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -67,12 +74,12 @@ function paraPonto(p: PontoCiclo): PontoGrafico {
 export default async function Painel({
   searchParams,
 }: {
-  searchParams: Promise<{ ver?: string }>;
+  searchParams: Promise<{ ver?: string; verDiario?: string }>;
 }) {
   // O layout do grupo já exige cliente ativo, mas a autorização se confere em
   // cada página: um layout não roda de novo a cada navegação.
   await exigirClienteAtivo();
-  const { ver } = await searchParams;
+  const { ver, verDiario } = await searchParams;
 
   // "2026-08" no fuso de Brasília. Calculado AQUI, no servidor, e passado como
   // prop: `new Date()` num componente de cliente renderizado no servidor
@@ -84,10 +91,18 @@ export default async function Painel({
     month: "2-digit",
   }).format(new Date());
 
-  const [{ leitura, serie, serieCiclo, precoBoi, precoBezerro }, cenario] = await Promise.all([
-    obterDadosPainel(),
-    lerCenarioMaisRecente(),
-  ]);
+  // O dia de hoje em Brasília, calculado no SERVIDOR — os cortes de janela da
+  // seção diária (180/60/14/7 dias) descem prontos como prop, e nenhum
+  // componente de cliente precisa de `new Date()` (hydration mismatch).
+  const hoje = hojeSaoPaulo();
+
+  const [{ leitura, serie, serieCiclo, precoBoi, precoBezerro }, cenario, linhasDiarias] =
+    await Promise.all([obterDadosPainel(), lerCenarioMaisRecente(), lerAbateDiario()]);
+
+  // Agrupamento e MM7 pré-computados AQUI (funções puras da raiz, as mesmas da
+  // suíte de testes): o explorador diário recebe a série pronta e só filtra.
+  const diasDiarios = agruparDias(linhasDiarias);
+  const pontosDiarios = serieComMm7(diasDiarios);
   const troca = precoBoi && precoBezerro ? precoBezerro.valor / precoBoi.valor : null;
   const estados = PAINEL_CICLO.join(" + ");
 
@@ -196,6 +211,52 @@ export default async function Painel({
           <p className="mt-4 text-sm text-neutral-600">
             Sem meses utilizáveis ({estados} juntos e volume completo) — nada para desenhar.
           </p>
+        )}
+      </section>
+
+      <section className="rounded-lg border bg-white p-5">
+        {diasDiarios.length === 0 ? (
+          // Recado curto, nunca seção fantasma: se o banco vier vazio (RLS,
+          // primeiro dia), a página diz o porquê em uma linha e segue.
+          <>
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+              Abate diário por estado
+            </p>
+            <p className="mt-1 text-sm text-neutral-600">
+              Nenhum dia coletado ainda — a seção aparece sozinha quando o primeiro dia entrar.
+            </p>
+          </>
+        ) : (
+          <ExploradorDiario
+            pontos={pontosDiarios}
+            cortes={{
+              linhas: diasAntes(hoje, 180),
+              colunas: diasAntes(hoje, 14),
+              assentando: diasAntes(hoje, 7),
+            }}
+            verInicial={
+              verDiario === "colunas" ? "colunas" : verDiario === "linhas" ? "linhas" : "tabela"
+            }
+            cabecalho={
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                  Abate diário por estado
+                </p>
+                <p className="mt-1 text-sm text-neutral-600">
+                  Hoje só o <strong>MS</strong> publica o abate por dia. O MT entra
+                  automaticamente quando o INDEA voltar; RO só publica o mês fechado e o PA
+                  com ~2 meses de atraso — seguem na seção mensal, abaixo.
+                </p>
+              </>
+            }
+            tabela={
+              <TabelaDiaria
+                dias={diasDiarios}
+                corte60={diasAntes(hoje, 60)}
+                corteAssentando={diasAntes(hoje, 7)}
+              />
+            }
+          />
         )}
       </section>
 
