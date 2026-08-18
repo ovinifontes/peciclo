@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatarDataBr, parsearMt, sessaoExpirada } from "../../src/coletores/mt.js";
+import type { AgregadoMensal } from "../../src/tipos.js";
+import { atribuirDia, formatarDataBr, parsearMt, sessaoExpirada } from "../../src/coletores/mt.js";
 
 describe("formatarDataBr", () => {
   it("converte ISO para dd/MM/yyyy", () => {
@@ -12,6 +13,36 @@ describe("sessaoExpirada", () => {
   it("detecta que a resposta é a tela de login", () => {
     expect(sessaoExpirada('<form name="login" action="Login.action"><input name="senha"></form>')).toBe(true);
     expect(sessaoExpirada("<table><tr><td>BOVINO</td></tr></table>")).toBe(false);
+  });
+});
+
+describe("atribuirDia", () => {
+  const agregado = (sexo: "FEMEA" | "MACHO", quantidade: number): AgregadoMensal => ({
+    uf: "MT",
+    ano: 2026,
+    mes: 8,
+    finalidade: "ABATE",
+    sexo,
+    quantidade,
+  });
+
+  it("atribui o dia da janela consultada a cada agregado", () => {
+    const dias = atribuirDia([agregado("FEMEA", 320), agregado("MACHO", 480)], "2026-08-15");
+    expect(dias).toEqual([
+      { uf: "MT", data: "2026-08-15", finalidade: "ABATE", sexo: "FEMEA", quantidade: 320 },
+      { uf: "MT", data: "2026-08-15", finalidade: "ABATE", sexo: "MACHO", quantidade: 480 },
+    ]);
+  });
+
+  it("lança se o INDEA devolver competência de outro mês", () => {
+    expect(() => atribuirDia([agregado("FEMEA", 320)], "2026-07-31")).toThrow(/2026-07-31/);
+    expect(() =>
+      atribuirDia([{ ...agregado("FEMEA", 320), ano: 2025 }], "2026-08-15"),
+    ).toThrow(/2025/);
+  });
+
+  it("dia sem movimento (arquivo vazio) devolve lista vazia sem lançar", () => {
+    expect(atribuirDia([], "2026-08-15")).toEqual([]);
   });
 });
 

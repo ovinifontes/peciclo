@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgregadoMensal, Janela, Sexo } from "../tipos.js";
+import type { AgregadoDiario, AgregadoMensal, Janela, Sexo } from "../tipos.js";
 import { lerLinhas, textoCelula } from "../xlsx/leitor.js";
 
 // Em 08/2026 o INDEA aposentou o /FronteiraWeb (503 permanente) na migração
@@ -170,6 +170,33 @@ export async function parsearMt(caminho: string): Promise<AgregadoMensal[]> {
   }
 
   return [...acumulado.values()];
+}
+
+/**
+ * Converte o agregado de uma consulta de JANELA DE 1 DIA em agregado diário,
+ * atribuindo o dia consultado. O relatório do INDEA só traz a competência
+ * (MM/YYYY), não o dia — o dia é o da janela, e a aditividade foi provada na
+ * exploração. Se o arquivo trouxer mês diferente do dia pedido, algo mudou do
+ * lado deles e gravar seria mentir: lança.
+ */
+export function atribuirDia(agregados: AgregadoMensal[], dia: string): AgregadoDiario[] {
+  const ano = Number(dia.slice(0, 4));
+  const mes = Number(dia.slice(5, 7));
+  for (const a of agregados) {
+    if (a.ano !== ano || a.mes !== mes) {
+      throw new Error(
+        `INDEA devolveu competência ${a.mes}/${a.ano} para a janela de 1 dia ${dia} — ` +
+          "o dia não é atribuível com segurança",
+      );
+    }
+  }
+  return agregados.map((a) => ({
+    uf: a.uf,
+    data: dia,
+    finalidade: a.finalidade,
+    sexo: a.sexo,
+    quantidade: a.quantidade,
+  }));
 }
 
 export interface ColetaMt {

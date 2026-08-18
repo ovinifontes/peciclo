@@ -39,6 +39,16 @@ export interface AgregadoMensal {
   quantidade: number;
 }
 
+/** Total de UM DIA já agregado — o que o coletor grava em peciclo_abate_diario. */
+export interface AgregadoDiario {
+  uf: UF;
+  /** ISO YYYY-MM-DD. */
+  data: string;
+  finalidade: string;
+  sexo: Sexo;
+  quantidade: number;
+}
+
 /**
  * Uma linha do abate mensal já consolidado, do jeito que sai do banco.
  *
@@ -52,6 +62,19 @@ export interface LinhaMensal {
   uf: UF;
   ano: number;
   mes: number;
+  sexo: "MACHO" | "FEMEA";
+  quantidade: number;
+}
+
+/**
+ * Uma linha do abate diário consolidado, do jeito que sai do banco.
+ * Mora aqui pelo mesmo motivo da LinhaMensal: o site importa este tipo e
+ * `tipos.ts` é a única fronteira que não arrasta dependência da raiz.
+ */
+export interface LinhaDiaria {
+  uf: UF;
+  /** ISO YYYY-MM-DD. */
+  data: string;
   sexo: "MACHO" | "FEMEA";
   quantidade: number;
 }
