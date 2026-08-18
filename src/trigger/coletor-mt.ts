@@ -1,9 +1,16 @@
 import { AbortTaskRunError, logger, task } from "@trigger.dev/sdk";
-import { CredencialInvalidaError, coletarMt } from "../coletores/mt.js";
+import { CredencialInvalidaError, atribuirDia, coletarMt } from "../coletores/mt.js";
 import { abrirColeta, fecharColeta } from "../dados/coletas.js";
 import { arquivarBruto } from "../dados/arquivos.js";
 import { gravarAgregados } from "../dados/mensal.js";
+import { gravarAgregadosDiarios } from "../dados/diario.js";
 import type { TipoColeta } from "../tipos.js";
+
+// O INDEA não publica histórico por dia, mas o relatório aceita janela de 1
+// dia (aditividade provada na exploração): o diário do MT se constrói daqui
+// em diante, reconsultando os últimos dias para capturar GTA lançada com
+// atraso. 3 dias ≈ 3 consultas extras por run, dentro do WAF e do maxDuration.
+const DIAS_DIARIO_MT = 3;
 
 /**
  * Coletor do MT (INDEA / GTA Condensado). Ao contrário do MS e do PA, o INDEA
@@ -19,7 +26,8 @@ export const coletorMt = task({
   // Um login por vez: portal de governo atrás de WAF.
   queue: { concurrencyLimit: 1 },
   machine: "small-2x",
-  maxDuration: 300,
+  // 600: o mensal (~2 min) mais até 3 consultas diárias de 1 dia cada.
+  maxDuration: 600,
   retry: {
     maxAttempts: 3,
     factor: 2,
@@ -41,6 +49,35 @@ export const coletorMt = task({
       const { agregados, arquivo, hash, nomeArquivo } = await coletarMt(janela, cpf, senha);
       await arquivarBruto({ caminho: nomeArquivo, conteudo: arquivo });
       await gravarAgregados(agregados, coletaId, "gta_condensada");
+
+      // Diário: SÓ roda se o mensal acima já gravou — se o mensal lançar, o
+      // catch lá embaixo fecha a coleta como falha e nada daqui executa.
+      // Sequencial na mesma run (um login por vez, o WAF agradece), e num
+      // try/catch que engole a falha: HOJE o export do INDEA está quebrado e
+      // isto vai falhar todos os dias até consertarem — é o esperado, não é
+      // alerta (o mensal, que quebra pelo MESMO motivo, já alerta o operador).
+      let diasDiario = 0;
+      try {
+        for (let atras = 1; atras <= DIAS_DIARIO_MT; atras++) {
+          const d = new Date(`${payload.ateIso}T00:00:00Z`);
+          d.setUTCDate(d.getUTCDate() - atras);
+          const dia = d.toISOString().slice(0, 10);
+
+          // nomeArquivo já embute a janela (mt/DIA_a_DIA.xlsx): não colide
+          // com o arquivo do mês nem com o de outro dia.
+          const doDia = await coletarMt({ inicio: dia, fim: dia }, cpf, senha);
+          await arquivarBruto({ caminho: doDia.nomeArquivo, conteudo: doDia.arquivo });
+          await gravarAgregadosDiarios(atribuirDia(doDia.agregados, dia), coletaId);
+          diasDiario += 1;
+          logger.info("dia do MT gravado", { dia, agregados: doDia.agregados.length });
+        }
+      } catch (erro) {
+        logger.warn("coleta diária do MT indisponível; mensal intacto", {
+          erro: erro instanceof Error ? erro.message : String(erro),
+          diasGravados: diasDiario,
+        });
+      }
+
       await fecharColeta({
         id: coletaId,
         status: agregados.length > 0 ? "ok" : "sem_dados",
@@ -48,8 +85,8 @@ export const coletorMt = task({
         arquivoHash: hash,
         linhasAfetadas: agregados.length,
       });
-      logger.info("coletor MT concluído", { agregados: agregados.length });
-      return { uf: "MT" as const, agregados: agregados.length };
+      logger.info("coletor MT concluído", { agregados: agregados.length, diasDiario });
+      return { uf: "MT" as const, agregados: agregados.length, diasDiario };
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
       await fecharColeta({ id: coletaId, status: "falha", erro: mensagem });

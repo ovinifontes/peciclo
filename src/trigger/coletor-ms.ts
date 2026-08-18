@@ -4,6 +4,7 @@ import { abrirColeta, fecharColeta } from "../dados/coletas.js";
 import { arquivarBruto } from "../dados/arquivos.js";
 import { gravarRegistros } from "../dados/registros.js";
 import { rollupJanela } from "../dados/mensal.js";
+import { rollupDiario } from "../dados/diario.js";
 import type { Janela, TipoColeta } from "../tipos.js";
 
 /**
@@ -44,6 +45,19 @@ export const coletorMs = task({
 
       const alteradas = await rollupJanela({ uf: "MS", janela: payload.janela, coletaId });
 
+      // Diário: mesmo insumo, outra granularidade. Em try/catch próprio porque
+      // falha aqui NUNCA pode derrubar o mensal — a planilha sai do mensal; o
+      // diário é seção nova do painel. A rejanela-semanal já dispara esta task
+      // com janelas de 1 dia, então os últimos 10 dias reassentam de graça.
+      let alteradasDia = 0;
+      try {
+        alteradasDia = await rollupDiario({ uf: "MS", janela: payload.janela, coletaId });
+      } catch (erro) {
+        logger.error("rollup diário do MS falhou; mensal intacto", {
+          erro: erro instanceof Error ? erro.message : String(erro),
+        });
+      }
+
       await fecharColeta({
         id: coletaId,
         status: registrosTotal > 0 ? "ok" : "sem_dados",
@@ -52,13 +66,19 @@ export const coletorMs = task({
         linhasAfetadas: gravadosTotal,
       });
 
-      logger.info("coletor MS concluído", { fatias: fatias.length, gravadosTotal, alteradas });
+      logger.info("coletor MS concluído", {
+        fatias: fatias.length,
+        gravadosTotal,
+        alteradas,
+        alteradasDia,
+      });
       return {
         uf: "MS" as const,
         fatias: fatias.length,
         registros: registrosTotal,
         gravados: gravadosTotal,
         alteradas,
+        alteradasDia,
       };
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
