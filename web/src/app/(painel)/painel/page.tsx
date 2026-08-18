@@ -243,9 +243,11 @@ export default async function Painel({
                   Abate diário por estado
                 </p>
                 <p className="mt-1 text-sm text-neutral-600">
-                  Hoje só o <strong>MS</strong> publica o abate por dia. O MT entra
-                  automaticamente quando o INDEA voltar; RO só publica o mês fechado e o PA
-                  com ~2 meses de atraso — seguem na seção mensal, abaixo.
+                  Hoje o <strong>MS</strong> publica o abate por dia e o <strong>RO</strong>{" "}
+                  entra por estimativa: o painel da IDARON publica o mês acumulado, e o dia
+                  é a variação entre duas manhãs — guia registrada com atraso cai no dia em
+                  que apareceu. O MT entra automaticamente quando o INDEA voltar; o PA, com
+                  ~2 meses de atraso, segue na seção mensal, abaixo.
                 </p>
               </>
             }
