@@ -73,6 +73,17 @@ describe("gravarAgregadosDiarios", () => {
     expect(typeof linhas[0].atualizado_em).toBe("string");
   });
 
+  it("aceita fonte explícita — o RO grava por diferença como powerbi_diff", async () => {
+    upsert.mockResolvedValue({ error: null });
+    await gravarAgregadosDiarios(
+      [{ uf: "RO", data: "2026-08-17", finalidade: "ABATE", sexo: "FEMEA", quantidade: 200 }],
+      7,
+      "powerbi_diff",
+    );
+    const [linhas] = upsert.mock.calls[0]!;
+    expect(linhas[0]).toMatchObject({ uf: "RO", fonte: "powerbi_diff", coleta_id: 7 });
+  });
+
   it("não toca no banco com lista vazia", async () => {
     await gravarAgregadosDiarios([], 42);
     expect(obterCliente).not.toHaveBeenCalled();

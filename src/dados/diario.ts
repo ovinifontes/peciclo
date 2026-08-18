@@ -26,13 +26,16 @@ export async function rollupDiario(args: {
 }
 
 /**
- * Grava dias que já vêm prontos da fonte (MT: o INDEA consultado com janela de
- * 1 dia). Sobrescreve por (uf, dia, finalidade, sexo) — e como a fonte é
- * 'gta_condensada_dia', o rollup diário nunca sobrescreve estas linhas.
+ * Grava dias que já vêm prontos da fonte: MT com 'gta_condensada_dia' (o INDEA
+ * consultado com janela de 1 dia, o default) e RO com 'powerbi_diff' (o dia
+ * estimado pela diferença de retratos do painel). Sobrescreve por (uf, dia,
+ * finalidade, sexo) — e como o rollup diário só sobrescreve linha
+ * 'gta_agregada' (dele mesmo), estas linhas ficam protegidas por construção.
  */
 export async function gravarAgregadosDiarios(
   agregados: AgregadoDiario[],
   coletaId: number,
+  fonte: "gta_condensada_dia" | "powerbi_diff" = "gta_condensada_dia",
 ): Promise<void> {
   if (agregados.length === 0) return;
   const { error } = await obterCliente()
@@ -44,7 +47,7 @@ export async function gravarAgregadosDiarios(
         finalidade: a.finalidade,
         sexo: a.sexo,
         quantidade: a.quantidade,
-        fonte: "gta_condensada_dia",
+        fonte,
         coleta_id: coletaId,
         atualizado_em: new Date().toISOString(),
       })),
