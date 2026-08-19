@@ -1,4 +1,5 @@
 import { defineConfig } from "@trigger.dev/sdk";
+import { playwright } from "@trigger.dev/build/extensions/playwright";
 
 export default defineConfig({
   // Ref do projeto no Trigger.dev. Fixo aqui (não é segredo) para o deploy via
@@ -9,6 +10,12 @@ export default defineConfig({
   logLevel: "info",
   maxDuration: 600,
   machine: "small-2x",
+  build: {
+    // Chromium headless na imagem de deploy, para o robô fotografar o site.
+    // A versão do browser segue o `playwright` pinado no package.json — a
+    // extensão a detecta pelos externals do build.
+    extensions: [playwright({ browsers: ["chromium"] })],
+  },
   retries: {
     enabledInDev: false,
     default: {

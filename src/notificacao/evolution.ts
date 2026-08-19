@@ -90,6 +90,57 @@ export async function enviarTexto(params: {
   return corpo;
 }
 
+/** Imagem inline (PNG em base64) — usada pelo envio diário das imagens. */
+export async function enviarImagem(params: {
+  instancia: string;
+  apiKey: string;
+  baseUrl: string;
+  numero: string;
+  imagemBase64: string;
+  legenda?: string;
+  nomeArquivo: string;
+  timeoutMs?: number;
+}): Promise<unknown> {
+  if (!params.imagemBase64.trim()) {
+    throw new EvolutionApiError("Imagem em base64 vazia.", 0, null);
+  }
+  // Mesma lição do documento: o servidor deriva o mimetype do fileName.
+  if (!/\.png$/i.test(params.nomeArquivo)) {
+    throw new EvolutionApiError(
+      `nomeArquivo precisa terminar em .png (recebido: "${params.nomeArquivo}").`,
+      0,
+      null,
+    );
+  }
+
+  const url = `${params.baseUrl.replace(/\/+$/, "")}/message/sendMedia/${encodeURIComponent(params.instancia)}`;
+  const resposta = await fetch(url, {
+    method: "POST",
+    headers: { apikey: params.apiKey, "content-type": "application/json" },
+    body: JSON.stringify({
+      number: normalizarNumero(params.numero),
+      mediatype: "image",
+      mimetype: "image/png",
+      fileName: params.nomeArquivo,
+      caption: params.legenda ?? "",
+      media: params.imagemBase64,
+    }),
+    signal: AbortSignal.timeout(params.timeoutMs ?? 120_000),
+  });
+
+  const tipo = resposta.headers.get("content-type") ?? "";
+  const corpo = tipo.includes("application/json") ? await resposta.json() : await resposta.text();
+
+  if (!resposta.ok) {
+    throw new EvolutionApiError(
+      extrairMensagemErro(corpo, `Evolution respondeu HTTP ${resposta.status}`),
+      resposta.status,
+      corpo,
+    );
+  }
+  return corpo;
+}
+
 export async function enviarDocumento(params: {
   instancia: string;
   apiKey: string;
