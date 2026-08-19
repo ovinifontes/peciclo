@@ -57,6 +57,7 @@ export const coletorMt = task({
       // isto vai falhar todos os dias até consertarem — é o esperado, não é
       // alerta (o mensal, que quebra pelo MESMO motivo, já alerta o operador).
       let diasDiario = 0;
+      let diasVazios = 0;
       try {
         for (let atras = 1; atras <= DIAS_DIARIO_MT; atras++) {
           const d = new Date(`${payload.ateIso}T00:00:00Z`);
@@ -69,6 +70,7 @@ export const coletorMt = task({
           await arquivarBruto({ caminho: doDia.nomeArquivo, conteudo: doDia.arquivo });
           await gravarAgregadosDiarios(atribuirDia(doDia.agregados, dia), coletaId);
           diasDiario += 1;
+          if (doDia.agregados.length === 0) diasVazios += 1;
           logger.info("dia do MT gravado", { dia, agregados: doDia.agregados.length });
         }
       } catch (erro) {
@@ -76,6 +78,20 @@ export const coletorMt = task({
           erro: erro instanceof Error ? erro.message : String(erro),
           diasGravados: diasDiario,
         });
+      }
+
+      // MT emite ~25 mil cabeças/dia: três dias seguidos VAZIOS é impossível
+      // de verdade — é o relatório respondendo com banco congelado (visto em
+      // 08/2026: as guias novas nascem no SINDESA novo e não abastecem o banco
+      // antigo do InfoSindesa). Sem este alerta, a coleta "funciona" todos os
+      // dias entregando dado parado — falha silenciosa, a pior de todas.
+      if (diasDiario === DIAS_DIARIO_MT && diasVazios === DIAS_DIARIO_MT) {
+        await alertarOperador(
+          "MT: relatório responde, mas o dado está CONGELADO",
+          `Os últimos ${DIAS_DIARIO_MT} dias vieram vazios no GTA Condensado — o banco do ` +
+            "InfoSindesa não recebe as guias do SINDESA novo. O mensal do MT está parado " +
+            "no valor da migração (06/08). A solução é integrar o SINDESA novo.",
+        );
       }
 
       await fecharColeta({
