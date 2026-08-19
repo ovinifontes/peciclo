@@ -42,7 +42,9 @@ const GraficoColunas = dynamic(() => import("./colunas-diario-recharts"), {
   loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
 });
 
-const ROTULO_VER: Record<Ver, string> = {
+// Exportado para a página de impressão (`/impressao-diario/[visao]`), que
+// monta o MESMO cartão do export manual com os MESMOS rótulos.
+export const ROTULO_VER: Record<Ver, string> = {
   tabela: "Tabela",
   linhas: "Linhas",
   colunas: "Colunas",
@@ -63,9 +65,10 @@ export interface FaixaAssentando {
 /**
  * Achata a série diária no formato do Recharts — uma linha por dia, uma coluna
  * por UF (dado cru) e, quando a visão pede, mais uma por MM7. Dias em que
- * nenhuma UF selecionada tem dado saem do eixo.
+ * nenhuma UF selecionada tem dado saem do eixo. Exportada para a página de
+ * impressão, que refaz o mesmo achatamento com todos os estados ativos.
  */
-function linhasDoGrafico(
+export function linhasDoGrafico(
   pontos: PontoDiario[],
   ufs: UF[],
   metrica: "total" | "pct",
@@ -374,9 +377,10 @@ function Kpi({ rotulo, valor, nota }: { rotulo: string; valor: string; nota: str
  * número grande); comparação = o MESMO dia da semana anterior, porque terça
  * contra domingo mediria o calendário, não o mercado. Enquanto o dia de
  * referência estiver na janela que a rejanela reprocessa, a nota avisa que ele
- * ainda assenta.
+ * ainda assenta. Exportada para a página de impressão — os KPIs do cartão do
+ * robô saem DESTA função, nunca de uma cópia.
  */
-function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: string): ReactNode {
+export function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: string): ReactNode {
   const notaDia = ind.diaReferencia
     ? `${diaSemana(ind.diaReferencia)}, ${rotuloDia(ind.diaReferencia)}${
         ind.diaReferencia >= corteAssentando ? " · dia ainda assenta" : ""
@@ -418,8 +422,9 @@ function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: string): Rea
  * mostram 180 dias com o cru fino atrás e a MM7 forte na frente; as Colunas
  * mostram 14 dias de dado cru, sem média. `animar={false}` nos dois lugares,
  * como no mensal — no cartão é obrigatório (a foto pegaria o traço no meio).
+ * Exportada para a página de impressão: o robô fotografa ESTES gráficos.
  */
-function SecoesGraficoDiario({
+export function SecoesGraficoDiario({
   ver,
   ufs,
   linhasTotal,
