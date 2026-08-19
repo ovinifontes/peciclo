@@ -4,6 +4,7 @@ import { abrirColeta, fecharColeta } from "../dados/coletas.js";
 import { arquivarBruto } from "../dados/arquivos.js";
 import { gravarAgregados } from "../dados/mensal.js";
 import { gravarAgregadosDiarios } from "../dados/diario.js";
+import { alertarOperador } from "../notificacao/alertas.js";
 import type { TipoColeta } from "../tipos.js";
 
 // O INDEA não publica histórico por dia, mas o relatório aceita janela de 1
