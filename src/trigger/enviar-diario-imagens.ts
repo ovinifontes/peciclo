@@ -196,7 +196,21 @@ async function fotografarCartoes(): Promise<
         timeout: 30_000,
       });
       await pagina.waitForTimeout(400); // assentar fontes/último paint
-      const png = await pagina.locator("[data-cartao-impressao]").screenshot({ type: "png" });
+      // NÃO é screenshot: a página expõe a MESMA captura do botão "Exportar
+      // imagem" (html-to-image, margem de marca, 2x). Screenshot do elemento
+      // saía sem margem e cortando borda — reclamação real do dono em 19/08.
+      const dataUrl = await pagina.evaluate(async () => {
+        // No navegador globalThis === window; a raiz não tem os tipos do DOM.
+        const capturar = (globalThis as unknown as { __capturarCartaoPng?: () => Promise<string> })
+          .__capturarCartaoPng;
+        if (!capturar) throw new Error("captura da página não registrada");
+        return await capturar();
+      });
+      const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
+      if (base64 === dataUrl || base64.length < 1000) {
+        throw new Error("captura da página não devolveu um PNG");
+      }
+      const png = Buffer.from(base64, "base64");
       capturas.push({ visao, rotulo, png });
     }
     return capturas;

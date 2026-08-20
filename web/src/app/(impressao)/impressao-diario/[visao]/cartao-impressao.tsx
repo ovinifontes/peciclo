@@ -95,6 +95,27 @@ export default function CartaoImpressaoDiario({
     return () => clearInterval(intervalo);
   }, [prontoNoHtml]);
 
+  // O robô das imagens diárias chama esta função em vez de tirar screenshot:
+  // é a MESMA captura do botão "Exportar imagem" (html-to-image, margem de
+  // marca e tudo) — o PNG do WhatsApp sai byte a byte igual ao do clique.
+  // Data URL aqui é seguro: quem consome é o page.evaluate do robô, não um
+  // download de celular.
+  useEffect(() => {
+    (window as unknown as { __capturarCartaoPng?: () => Promise<string> }).__capturarCartaoPng =
+      async () => {
+        const cartao = cartaoRef.current;
+        if (!cartao) throw new Error("cartão não montado");
+        const { capturarPng } = await import("../../../(painel)/painel/exportar");
+        const blob = await capturarPng(cartao);
+        return await new Promise<string>((resolver, rejeitar) => {
+          const leitor = new FileReader();
+          leitor.onload = () => resolver(String(leitor.result));
+          leitor.onerror = () => rejeitar(leitor.error);
+          leitor.readAsDataURL(blob);
+        });
+      };
+  }, []);
+
   return (
     <div
       ref={cartaoRef}

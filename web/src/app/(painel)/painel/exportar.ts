@@ -37,16 +37,18 @@ export function dataPorExtenso(agora: Date): string {
 /** Respiro branco em volta do conteúdo no PNG, em pixels de CSS. */
 export const MARGEM_CAPTURA = 24;
 
-export async function exportarPng(no: HTMLElement, visao: string): Promise<void> {
+/**
+ * A CAPTURA em si — separada do download porque o robô das imagens diárias
+ * chama exatamente esta função dentro da página de impressão: o PNG do
+ * WhatsApp automático tem de ser byte a byte o mesmo do clique manual
+ * (a primeira versão fotografava com o screenshot do Chromium e saía sem a
+ * margem, cortando as bordas — reclamação real de 19/08).
+ */
+export async function capturarPng(no: HTMLElement): Promise<Blob> {
   const { toBlob } = await import("html-to-image");
-  const agora = new Date();
 
   // A margem e o reset de posição entram só no CLONE, via `style` — o nó real
   // continua parado fora da tela, sem reflow nenhum.
-  //
-  // Blob, NUNCA data URL: um PNG 2x de seção inteira passa fácil de 2 MB, e
-  // navegador de celular aceita o aviso de download de data URL e descarta o
-  // arquivo em silêncio (foi exatamente o bug relatado em 14/08).
   const rect = no.getBoundingClientRect();
   const blob = await toBlob(no, {
     pixelRatio: 2,
@@ -61,8 +63,15 @@ export async function exportarPng(no: HTMLElement, visao: string): Promise<void>
     },
   });
   if (!blob) throw new Error("captura vazia");
+  return blob;
+}
 
-  baixar(blob, nomeArquivo(visao, agora));
+export async function exportarPng(no: HTMLElement, visao: string): Promise<void> {
+  // Blob, NUNCA data URL: um PNG 2x de seção inteira passa fácil de 2 MB, e
+  // navegador de celular aceita o aviso de download de data URL e descarta o
+  // arquivo em silêncio (foi exatamente o bug relatado em 14/08).
+  const blob = await capturarPng(no);
+  baixar(blob, nomeArquivo(visao, new Date()));
 }
 
 function baixar(blob: Blob, nome: string): void {
