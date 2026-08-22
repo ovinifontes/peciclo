@@ -25,13 +25,29 @@ const URL_BASE = "https://publicacoes.imea.com.br/relatorio-de-mercado/abate-bov
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-/** Baixa o PDF do relatório n (a URL redireciona para um S3 sem login). */
+/**
+ * Baixa o PDF do relatório n (a URL redireciona para um S3 sem login).
+ *
+ * Da nuvem do Trigger (us-east-1) o publicacoes.imea.com.br PENDURA a conexão
+ * — mesmo geo-bloqueio do CEPEA e do IAGRO (a primeira run de 22/08 morreu em
+ * TIMED_OUT). Com `IMEA_PROXY_URL`/`MS_PROXY_SECRET` no ambiente, a busca sai
+ * pela Edge Function `buscar-imea` (IP brasileiro do Supabase); sem as
+ * variáveis (dev local, IP BR), vai direto.
+ */
 export async function baixarImea(n: number): Promise<Buffer> {
-  const resposta = await fetch(`${URL_BASE}/${n}`, {
-    redirect: "follow",
-    headers: { "user-agent": USER_AGENT },
-    signal: AbortSignal.timeout(60_000),
-  });
+  const proxy = process.env.IMEA_PROXY_URL;
+  const segredo = process.env.MS_PROXY_SECRET;
+  const resposta =
+    proxy && segredo
+      ? await fetch(`${proxy}?n=${n}`, {
+          headers: { "x-proxy-secret": segredo },
+          signal: AbortSignal.timeout(120_000),
+        })
+      : await fetch(`${URL_BASE}/${n}`, {
+          redirect: "follow",
+          headers: { "user-agent": USER_AGENT },
+          signal: AbortSignal.timeout(60_000),
+        });
   if (resposta.status === 404) throw new RelatorioInexistenteError(n);
   if (!resposta.ok) throw new Error(`IMEA n=${n}: HTTP ${resposta.status}`);
 
