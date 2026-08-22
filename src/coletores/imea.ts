@@ -2,7 +2,10 @@
 // INDEA (InfoSindesa) estiver congelado. O IMEA publica mensalmente, em PDF,
 // os números do PRÓPRIO INDEA (origem MT, incluindo envios para abate em
 // outras UFs), com ~2 semanas de atraso.
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
+//
+// O pdf-parse entra por import DINÂMICO, nunca no topo: com import estático,
+// o worker da nuvem morria no BOOT (runs TIMED_OUT com zero attempts) e sem
+// mensagem nenhuma. Preguiçoso, uma falha de carga vira erro legível na run.
 
 /** O mês pedido ainda não foi publicado (URL devolve 404). Não é falha. */
 export class RelatorioInexistenteError extends Error {
@@ -124,6 +127,7 @@ export function extrairAbates(itens: ItemTexto[]): AbatesImea {
 
 /** Extrai machos/fêmeas/total do PDF do IMEA. Lança se qualquer coisa não fechar. */
 export async function parsearImea(buffer: Buffer): Promise<AbatesImea> {
+  const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js");
   const itens: ItemTexto[] = [];
   let pagina = 0;
   await pdfParse(buffer, {
