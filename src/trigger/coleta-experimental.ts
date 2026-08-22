@@ -43,10 +43,13 @@ export const coletaExperimental = schedules.task({
     const dataLocal = quando.toLocaleDateString("en-CA", { timeZone: fuso });
     const problemas: string[] = [];
 
-    // --- GO e SP (SIGSIF federal) ---
+    // --- GO, SP e MT (SIGSIF federal) ---
+    // MT entrou em 22/08/2026 como rede de segurança: o InfoSindesa congelou
+    // na migração do INDEA e esta série (~90% do abate de MT, só inspeção
+    // federal) garante que nunca ficamos às cegas. Tendência, não nível.
     let mesesSif = 0;
     try {
-      const dados = await coletarSigsif(["GO", "SP"]);
+      const dados = await coletarSigsif(["GO", "SP", "MT"]);
       mesesSif = await gravarAbateSif(dados);
       logger.info("SIGSIF coletado", { linhas: mesesSif });
     } catch (erro) {
