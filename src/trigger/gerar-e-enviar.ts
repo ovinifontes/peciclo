@@ -1,12 +1,16 @@
 import { logger, task } from "@trigger.dev/sdk";
 import { lerConfig } from "../config.js";
 import { arquivarBruto } from "../dados/arquivos.js";
-import { gerarPlanilha } from "../planilha/gerar.js";
+import { gerarPlanilha, legendaPlanilha } from "../planilha/gerar.js";
 import { enviarDocumento, instanciaConectada } from "../notificacao/evolution.js";
 import { alertarOperador } from "../notificacao/alertas.js";
 import { detectarAnomalias } from "../planilha/anomalias.js";
 import { lerAbateMensal } from "../dados/mensal.js";
-import { listarTelefonesAtivos, unirDestinatarios } from "../dados/perfis.js";
+import {
+  listarTelefonesAtivos,
+  motivoNinguemRecebeu,
+  unirDestinatarios,
+} from "../dados/perfis.js";
 
 export const gerarEEnviar = task({
   id: "gerar-e-enviar",
@@ -65,7 +69,7 @@ export const gerarEEnviar = task({
           numero,
           arquivo,
           nomeArquivo,
-          legenda: `Abate bovino — atualizado em ${payload.dataReferencia}`,
+          legenda: legendaPlanilha(payload.dataReferencia, payload.ufsComFalha),
         });
         enviados++;
       } catch (erro) {
@@ -74,6 +78,16 @@ export const gerarEEnviar = task({
           erro: erro instanceof Error ? erro.message : String(erro),
         });
       }
+    }
+
+    // Sem esta guarda o run fecha VERDE com `enviados: 0`: a Evolution aceita a
+    // conexão mas recusa todo envio, ou a lista vem vazia, e ninguém fica sabendo.
+    const ninguem = motivoNinguemRecebeu("a planilha", enviados, destinatarios.length);
+    if (ninguem) {
+      await alertarOperador(
+        `Planilha de ${payload.dataReferencia} não chegou a ninguém`,
+        `${ninguem}. Ela foi gerada e arquivada.`,
+      );
     }
 
     return { enviados, arquivada: true };

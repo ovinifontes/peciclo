@@ -54,10 +54,19 @@ export const coletaDiaria = schedules.task({
       }
     });
 
-    await gerarEEnviar.triggerAndWait({
+    // triggerAndWait devolve o desfecho em vez de lançar: sem checar `.ok`, uma
+    // planilha que estoura passa como sucesso e o cliente fica sem planilha E
+    // sem aviso (os coletores tinham ido bem, então nada mais alertaria).
+    const planilha = await gerarEEnviar.triggerAndWait({
       dataReferencia: dataLocal,
       ufsComFalha: falhas.map((f) => f.uf),
     });
+    if (!planilha.ok) {
+      const erro =
+        planilha.error instanceof Error ? planilha.error.message : String(planilha.error);
+      logger.error("geração/envio da planilha falhou", { erro });
+      await alertarOperador(`Planilha de ${dataLocal} NÃO saiu`, erro);
+    }
 
     if (falhas.length > 0) {
       // Recoleta automática só das UFs que falharam, 45 min depois (até 2
@@ -77,6 +86,10 @@ export const coletaDiaria = schedules.task({
       await alertarOperador(
         `Coleta ${dataLocal}: ${falhas.length} de ${ufs.length} coletores falharam`,
         falhas.map((f) => `${f.uf}: ${f.erro}`).join("\n"),
+        // Identidade pela LISTA DE ESTADOS, não pelo texto: a data no assunto
+        // faria "MT falhou" virar notícia nova todo dia. Mudou o conjunto de
+        // estados (outro caiu, ou o MT voltou), a chave muda e o alerta sai.
+        { chave: `coletores-falharam:${falhas.map((f) => f.uf).sort().join(",")}` },
       );
     }
 

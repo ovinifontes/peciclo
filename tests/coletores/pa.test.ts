@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interpretarCategoria, parsearPa, urlDeConfirmacao } from "../../src/coletores/pa.js";
+import { anosParaVarrer, interpretarCategoria, parsearPa, urlDeConfirmacao } from "../../src/coletores/pa.js";
 
 describe("interpretarCategoria", () => {
   it("separa espécie, sexo e faixa etária do rótulo da coluna", () => {
@@ -70,5 +70,19 @@ describe("urlDeConfirmacao", () => {
 
   it("devolve null quando não é a página de aviso", () => {
     expect(urlDeConfirmacao("<html><body>qualquer coisa</body></html>")).toBeNull();
+  });
+});
+
+describe("anosParaVarrer", () => {
+  it("varre também o ano anterior enquanto o atraso da ADEPARA não passou", () => {
+    // Em jan-mar/2027 os arquivos de nov e dez/2026 ainda estão sendo
+    // publicados DENTRO da pasta "GTAs 2026" — olhar só 2027 os perderia.
+    expect(anosParaVarrer(2027, 1)).toEqual([2027, 2026]);
+    expect(anosParaVarrer(2027, 3)).toEqual([2027, 2026]);
+  });
+
+  it("volta a varrer só o ano corrente de abril em diante", () => {
+    expect(anosParaVarrer(2027, 4)).toEqual([2027]);
+    expect(anosParaVarrer(2027, 12)).toEqual([2027]);
   });
 });

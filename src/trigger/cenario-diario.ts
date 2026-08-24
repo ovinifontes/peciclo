@@ -21,7 +21,11 @@ import { gerarTexto } from "../ia/anthropic.js";
 import { gravarCenario, lerCenarioDoDia, marcarEnviado } from "../dados/cenarios.js";
 import { enviarTexto, instanciaConectada } from "../notificacao/evolution.js";
 import { alertarOperador } from "../notificacao/alertas.js";
-import { listarTelefonesAtivos, unirDestinatarios } from "../dados/perfis.js";
+import {
+  listarTelefonesAtivos,
+  motivoNinguemRecebeu,
+  unirDestinatarios,
+} from "../dados/perfis.js";
 
 const MODELO = "claude-opus-5";
 // Folga larga de propósito: o Opus 5 raciocina antes de escrever e o
@@ -277,6 +281,10 @@ async function executar(dataLocal: string) {
           });
         }
       }
+      // Conectada e ainda assim ninguém recebeu (todo envio recusado, ou lista
+      // vazia): sem isto o run fecha verde com `enviados: 0` e ninguém sabe.
+      const ninguem = motivoNinguemRecebeu("o cenário", enviados, destinatarios.length);
+      if (ninguem) problemas.push(ninguem);
     } else {
       problemas.push("instância da Evolution desconectada");
     }

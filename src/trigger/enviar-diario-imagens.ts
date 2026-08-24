@@ -4,7 +4,11 @@ import { lerConfig } from "../config.js";
 import { formatarDataBr } from "../ia/dossie.js";
 import { enviarImagem, instanciaConectada } from "../notificacao/evolution.js";
 import { alertarOperador } from "../notificacao/alertas.js";
-import { listarTelefonesAtivos, unirDestinatarios } from "../dados/perfis.js";
+import {
+  listarTelefonesAtivos,
+  motivoNinguemRecebeu,
+  unirDestinatarios,
+} from "../dados/perfis.js";
 import { imagensJaEnviadas, marcarImagensEnviadas } from "../dados/envios-imagens.js";
 
 /** As três visões do cartão diário, na ordem em que chegam no WhatsApp. */
@@ -124,9 +128,10 @@ async function executar(dataLocal: string) {
         });
       }
     }
-    if (enviados === 0 && destinatarios.length > 0) {
-      problemas.push("nenhum destinatário recebeu as 3 imagens completas");
-    }
+    // Lista vazia também é falha: sem o `else` da guarda antiga, um dia sem
+    // destinatário nenhum fechava verde com `enviados: 0` e sem aviso.
+    const ninguem = motivoNinguemRecebeu("as 3 imagens", enviados, destinatarios.length);
+    if (ninguem) problemas.push(ninguem);
   } else {
     problemas.push("instância da Evolution desconectada");
   }

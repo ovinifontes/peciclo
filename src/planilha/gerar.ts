@@ -39,6 +39,23 @@ export interface Grade {
   linhas: LinhaGrade[];
 }
 
+/**
+ * Legenda da planilha no WhatsApp. Texto de CLIENTE: quando um estado não
+ * atualizou hoje, a legenda diz — "atualizado em <data>" sozinho vende dado
+ * congelado há semanas como se fosse fresco.
+ * Usa os mesmos nomes de estado das colunas da planilha, não a sigla técnica.
+ */
+export function legendaPlanilha(dataReferencia: string, ufsComFalha: string[] = []): string {
+  const base = `Abate bovino — atualizado em ${dataReferencia}`;
+  const nomes = ufsComFalha.map((uf) => ESTADOS.find((e) => e.uf === uf)?.rotulo ?? uf);
+  if (nomes.length === 0) return base;
+  if (nomes.length === 1) {
+    return `${base}\n\n⚠️ ${nomes[0]} não atualizou hoje: os números desse estado são os da última atualização.`;
+  }
+  const lista = `${nomes.slice(0, -1).join(", ")} e ${nomes.at(-1)}`;
+  return `${base}\n\n⚠️ ${lista} não atualizaram hoje: os números desses estados são os da última atualização.`;
+}
+
 export function montarGradeDados(
   dados: LinhaMensal[],
   anoInicial: number,

@@ -110,6 +110,9 @@ export const recoleta = task({
         await alertarOperador(
           assuntoRecuperado(ufs, tentativa),
           `Coleta de ${dataReferencia} completada; o banco já está atualizado.`,
+          // Boa notícia nunca é suprimida como repetição — se a fonte quebra e
+          // se recupera todo dia, o operador precisa ver os dois lados.
+          { sempre: true },
         );
         return { dataReferencia, tentativa, ufs, desfecho: "recuperado", falhas };
       }
@@ -118,6 +121,10 @@ export const recoleta = task({
         assuntoEsgotado(desfecho.ufs),
         falhas.map((f) => `${f.uf}: ${f.erro}`).join("\n") +
           "\n\nA coleta diária recoleta o mês inteiro, então amanhã isso se autocorrige.",
+        // Mesma razão do alerta da coleta diária: a notícia é QUAIS estados
+        // esgotaram as tentativas, não em que dia — repetir isso toda manhã
+        // durante uma pane de semanas só ensina o operador a ignorar.
+        { chave: `recoleta-esgotada:${[...desfecho.ufs].sort().join(",")}` },
       );
       return { dataReferencia, tentativa, ufs, desfecho: "esgotado", falhas };
     } catch (erro) {

@@ -21,6 +21,21 @@ export function unirDestinatarios(daConfiguracao: string[], doBanco: string[]): 
 }
 
 /**
+ * Descreve o desfecho "ninguém recebeu" — `null` quando pelo menos um cliente
+ * recebeu. Run verde com `enviados: 0` é a pior falha do produto: o cliente
+ * não recebe e ninguém fica sabendo. Lista vazia conta como falha também.
+ */
+export function motivoNinguemRecebeu(
+  oQue: string,
+  enviados: number,
+  destinatarios: number,
+): string | null {
+  if (enviados > 0) return null;
+  if (destinatarios === 0) return `lista de destinatários vazia — ${oQue} não foi para ninguém`;
+  return `nenhum dos ${destinatarios} destinatários recebeu ${oQue}`;
+}
+
+/**
  * Telefones dos clientes ativos que optaram por receber.
  * Usa a service_role, que ignora RLS — não depende de policy nenhuma.
  * Nunca lança: qualquer falha devolve lista vazia e o job segue.

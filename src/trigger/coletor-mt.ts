@@ -1,6 +1,6 @@
 import { AbortTaskRunError, logger, task } from "@trigger.dev/sdk";
 import { CredencialInvalidaError, atribuirDia, coletarMt } from "../coletores/mt.js";
-import { abrirColeta, fecharColeta } from "../dados/coletas.js";
+import { abrirColeta, coletaVaziaSuspeita, fecharColeta } from "../dados/coletas.js";
 import { arquivarBruto } from "../dados/arquivos.js";
 import { gravarAgregados } from "../dados/mensal.js";
 import { gravarAgregadosDiarios } from "../dados/diario.js";
@@ -86,10 +86,14 @@ export const coletorMt = task({
       // 08/2026: as guias novas nascem no SINDESA novo e não abastecem o banco
       // antigo do InfoSindesa). Sem este alerta, a coleta "funciona" todos os
       // dias entregando dado parado — falha silenciosa, a pior de todas.
-      if (diasDiario === DIAS_DIARIO_MT && diasVazios === DIAS_DIARIO_MT) {
+      // TODOS os dias SONDADOS vazios, não os 3 combinados: exigir a sondagem
+      // completa fazia um único timeout do WAF na 3ª consulta calar o alerta
+      // para sempre — a condição de detectar congelamento não pode depender de
+      // a rede ter colaborado.
+      if (diasVazios === diasDiario && diasDiario > 0) {
         await alertarOperador(
           "MT: relatório responde, mas o dado está CONGELADO",
-          `Os últimos ${DIAS_DIARIO_MT} dias vieram vazios no GTA Condensado — o banco do ` +
+          `Os últimos ${diasDiario} dias sondados vieram vazios no GTA Condensado — o banco do ` +
             "InfoSindesa não recebe as guias do SINDESA novo. O mensal do MT está parado " +
             "no valor da migração (06/08). A solução é integrar o SINDESA novo.",
         );
@@ -103,6 +107,24 @@ export const coletorMt = task({
         linhasAfetadas: agregados.length,
       });
       logger.info("coletor MT concluído", { agregados: agregados.length, diasDiario });
+
+      // "sem_dados" ficava só no banco de coletas e ninguém lia: mês que já
+      // devia ter volume voltando VAZIO é falha silenciosa, e falha silenciosa
+      // alerta (ver `coletaVaziaSuspeita`). Depois do fecharColeta de
+      // propósito — falha de alerta não pode desmentir a coleta registrada.
+      if (coletaVaziaSuspeita({ linhas: agregados.length, ano: payload.ano, mes: payload.mes })) {
+        await alertarOperador(
+          "MT: coleta mensal voltou VAZIA",
+          `O GTA Condensado respondeu, mas nenhuma linha de abate bovino saiu para ${String(payload.mes).padStart(2, "0")}/${payload.ano} ` +
+            `(janela ${inicio} a ${payload.ateIso}). Nada foi gravado: o mensal de MT está parado no ` +
+            "último valor bom até isso ser conferido.",
+        ).catch((erro) =>
+          logger.error("falha ao alertar coleta vazia do MT", {
+            erro: erro instanceof Error ? erro.message : String(erro),
+          }),
+        );
+      }
+
       return { uf: "MT" as const, agregados: agregados.length, diasDiario };
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);

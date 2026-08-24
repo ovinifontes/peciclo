@@ -33,7 +33,7 @@ export const coletorImea = schedules.task({
     timezone: "America/Sao_Paulo",
     environments: ["PRODUCTION"],
   },
-  machine: "small-1x",
+  machine: "small-2x",
   maxDuration: 300,
   retry: { maxAttempts: 2 },
   run: async (payload) => {
@@ -78,7 +78,10 @@ export const coletorImea = schedules.task({
           contentType: "application/pdf",
         });
 
-        const { machos, femeas } = await parsearImea(pdf);
+        // O PDF precisa confirmar a competência: `n` é chute aritmético e uma
+        // edição extra do IMEA desloca todos — mês divergente vira problema
+        // alertado, nunca número gravado sob a competência errada.
+        const { machos, femeas } = await parsearImea(pdf, { ano, mes });
         const { gravou, totalAnterior } = await gravarMensalImea({ ano, mes, machos, femeas });
 
         const totalGravado = machos + femeas;
@@ -92,6 +95,9 @@ export const coletorImea = schedules.task({
           await alertarOperador(
             `📈 IMEA: MT de ${rotulo} atualizado para ${totalGravado.toLocaleString("pt-BR")}`,
             `Machos ${machos.toLocaleString("pt-BR")} + fêmeas ${femeas.toLocaleString("pt-BR")} (${era}).`,
+            // Notícia boa e rara (só sai quando o número muda de verdade):
+            // nunca suprimida como repetição.
+            { sempre: true },
           );
         } else {
           logger.info("IMEA não supera o número atual — mantido", {

@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 const obterCliente = vi.hoisted(() => vi.fn());
 vi.mock("../../src/dados/cliente.js", () => ({ obterCliente }));
 
-import { listarTelefonesAtivos, unirDestinatarios } from "../../src/dados/perfis.js";
+import {
+  listarTelefonesAtivos,
+  motivoNinguemRecebeu,
+  unirDestinatarios,
+} from "../../src/dados/perfis.js";
 
 /** Imita a cadeia do supabase-js: qualquer método devolve a si mesma e o await resolve. */
 function consultaQueResolve(resultado: unknown) {
@@ -59,5 +63,23 @@ describe("listarTelefonesAtivos", () => {
       throw new Error("sem rede");
     });
     await expect(listarTelefonesAtivos()).resolves.toEqual([]);
+  });
+});
+
+describe("motivoNinguemRecebeu", () => {
+  it("cala quando pelo menos um cliente recebeu", () => {
+    expect(motivoNinguemRecebeu("a planilha", 1, 3)).toBeNull();
+  });
+
+  it("acusa quando a Evolution aceitou a conexão mas recusou todo envio", () => {
+    expect(motivoNinguemRecebeu("a planilha", 0, 3)).toBe(
+      "nenhum dos 3 destinatários recebeu a planilha",
+    );
+  });
+
+  it("acusa também a lista vazia — run verde com zero envio é a pior falha", () => {
+    expect(motivoNinguemRecebeu("o cenário", 0, 0)).toBe(
+      "lista de destinatários vazia — o cenário não foi para ninguém",
+    );
   });
 });

@@ -50,6 +50,29 @@ export async function encontrarPastaDoAno(
   return alvo?.id ?? null;
 }
 
+/**
+ * Último mês em que ainda vale varrer a pasta do ano ANTERIOR.
+ *
+ * A ADEPARA publica com ~2 meses de atraso e sempre dentro da pasta do ano a
+ * que os dados se referem: nov/2026 e dez/2026 aparecem em jan-fev/2027 dentro
+ * de "GTAs 2026". Varrendo só a pasta do ano corrente esses dois meses nunca
+ * seriam vistos — a coluna do Pará ficaria vazia para sempre.
+ *
+ * Março (e não o ano inteiro) porque cada arquivo é BAIXADO para ser hasheado:
+ * varrer a pasta velha custa downloads, não só requisições. Três meses cobrem
+ * o atraso de dois com uma folga de um; a partir de abril a pasta velha já foi
+ * lida e só custaria banda.
+ */
+const ULTIMO_MES_COM_ATRASO_PA = 3;
+
+/** Pastas que a coleta do PA precisa varrer neste mês — ver constante acima. */
+export function anosParaVarrer(ano: number, mes: number): number[] {
+  return mes <= ULTIMO_MES_COM_ATRASO_PA ? [ano, ano - 1] : [ano];
+}
+
+const mesCorrenteBr = () =>
+  Number(new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }).slice(5, 7));
+
 const ehZip = (b: Buffer) => b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b;
 
 /**
@@ -177,26 +200,36 @@ export interface ArquivoNovo {
   registros: RegistroGta[];
 }
 
-/** Baixa e parseia apenas os arquivos ainda não processados. */
+/**
+ * Baixa e parseia apenas os arquivos ainda não processados. No começo do ano
+ * varre também a pasta do ano anterior (`anosParaVarrer`), onde a ADEPARA
+ * publica nov e dez com atraso; o filtro por hash descarta o que já entrou.
+ */
 export async function coletarPa(args: {
   ano: number;
+  /** Mês de referência; padrão é o mês corrente no fuso de Brasília. */
+  mes?: number;
   apiKey: string;
   hashesJaProcessados: Set<string>;
 }): Promise<ArquivoNovo[]> {
-  const pastaId = await encontrarPastaDoAno(args.ano, args.apiKey);
-  if (!pastaId) return [];
-
-  const itens = (await listarPasta(pastaId, args.apiKey)).filter((i) => /\.xlsx$/i.test(i.nome));
   const novos: ArquivoNovo[] = [];
 
-  for (const item of itens) {
-    const conteudo = await baixarArquivoDrive(item.id);
-    const hash = createHash("sha256").update(conteudo).digest("hex");
-    if (args.hashesJaProcessados.has(hash)) continue;
+  for (const ano of anosParaVarrer(args.ano, args.mes ?? mesCorrenteBr())) {
+    const pastaId = await encontrarPastaDoAno(ano, args.apiKey);
+    // Pasta ausente é normal: a do ano corrente só nasce quando a ADEPARA
+    // publica o 1º arquivo dele, lá por março.
+    if (!pastaId) continue;
 
-    const temporario = join(tmpdir(), `pa-${hash.slice(0, 12)}.xlsx`);
-    await writeFile(temporario, conteudo);
-    novos.push({ arquivo: item, conteudo, hash, registros: await parsearPa(temporario) });
+    const itens = (await listarPasta(pastaId, args.apiKey)).filter((i) => /\.xlsx$/i.test(i.nome));
+    for (const item of itens) {
+      const conteudo = await baixarArquivoDrive(item.id);
+      const hash = createHash("sha256").update(conteudo).digest("hex");
+      if (args.hashesJaProcessados.has(hash)) continue;
+
+      const temporario = join(tmpdir(), `pa-${hash.slice(0, 12)}.xlsx`);
+      await writeFile(temporario, conteudo);
+      novos.push({ arquivo: item, conteudo, hash, registros: await parsearPa(temporario) });
+    }
   }
 
   return novos;

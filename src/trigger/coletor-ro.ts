@@ -1,10 +1,11 @@
 import { logger, task } from "@trigger.dev/sdk";
 import { coletarRo, descobrirRelatorio, extrairChaveRecurso } from "../coletores/ro.js";
-import { abrirColeta, fecharColeta } from "../dados/coletas.js";
+import { abrirColeta, coletaVaziaSuspeita, fecharColeta } from "../dados/coletas.js";
 import { gravarAgregadosDiarios } from "../dados/diario.js";
 import { gravarAgregados } from "../dados/mensal.js";
 import { gravarSnapshot, lerHistoricoSnapshots } from "../dados/ro-snapshots.js";
 import { calcularDiferencaDiaria } from "../diario/diferenca.js";
+import { alertarOperador } from "../notificacao/alertas.js";
 
 const CHAVE_PADRAO = "31c7b0f6-5ede-4358-be35-b8fc49ac0ab1";
 
@@ -91,7 +92,28 @@ export const coletorRo = task({
         });
       }
 
-      await fecharColeta({ id: coletaId, status: "ok", linhasAfetadas: agregados.length });
+      await fecharColeta({
+        id: coletaId,
+        status: agregados.length > 0 ? "ok" : "sem_dados",
+        linhasAfetadas: agregados.length,
+      });
+
+      // Coletor que devolve [] fechava como "ok" e ninguém lia o status: a
+      // coleta do RO podia morrer CALADA (ver `coletaVaziaSuspeita`). Depois
+      // do fecharColeta de propósito — falha de alerta não pode desmentir uma
+      // coleta que foi registrada certo.
+      if (coletaVaziaSuspeita({ linhas: agregados.length, ano: payload.ano, mes: payload.mes })) {
+        await alertarOperador(
+          "RO: coleta mensal voltou VAZIA",
+          `O Power BI do IDARON respondeu, mas nenhuma linha de abate saiu para ${String(payload.mes).padStart(2, "0")}/${payload.ano}. ` +
+            "Suspeita principal: as faixas etárias mudaram de rótulo e o sufixo ' F'/' M' " +
+            "deixou de casar — o painel congela no último mês bom até isso ser conferido.",
+        ).catch((erro) =>
+          logger.error("falha ao alertar coleta vazia do RO", {
+            erro: erro instanceof Error ? erro.message : String(erro),
+          }),
+        );
+      }
 
       return { uf: "RO" as const, agregados: agregados.length, diaDiario };
     } catch (erro) {

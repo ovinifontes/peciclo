@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import { montarGradeDados } from "../../src/planilha/gerar.js";
+import { legendaPlanilha, montarGradeDados } from "../../src/planilha/gerar.js";
 import type { LinhaMensal } from "../../src/dados/mensal.js";
 
 const dados: LinhaMensal[] = [
@@ -43,5 +43,31 @@ describe("montarGradeDados", () => {
     const maio = grade.linhas.find((l) => l.ano === 2026 && l.mes === 5)!;
     expect(maio.valores[6]).toBe(188406); // PA fêmea
     expect(maio.valores[7]).toBe(152453); // PA macho
+  });
+});
+
+describe("legendaPlanilha", () => {
+  it("sem falha, diz só a data", () => {
+    expect(legendaPlanilha("2026-08-24")).toBe("Abate bovino — atualizado em 2026-08-24");
+  });
+
+  it("com um estado parado, avisa o cliente em vez de vender dado velho como fresco", () => {
+    const legenda = legendaPlanilha("2026-08-24", ["MT"]);
+    expect(legenda).toContain("Abate bovino — atualizado em 2026-08-24");
+    expect(legenda).toContain("Mato Grosso não atualizou hoje");
+    expect(legenda).toContain("última atualização");
+  });
+
+  it("com vários, lista no plural e com nome de estado, não sigla", () => {
+    expect(legendaPlanilha("2026-08-24", ["MT", "RO"])).toContain(
+      "Mato Grosso e Rondonia não atualizaram hoje",
+    );
+    expect(legendaPlanilha("2026-08-24", ["MT", "RO", "PA"])).toContain(
+      "Mato Grosso, Rondonia e Pará não atualizaram hoje",
+    );
+  });
+
+  it("UF desconhecida não quebra a legenda", () => {
+    expect(legendaPlanilha("2026-08-24", ["ZZ"])).toContain("ZZ não atualizou hoje");
   });
 });
