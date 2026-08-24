@@ -3,7 +3,7 @@ import { coletarRo, descobrirRelatorio, extrairChaveRecurso } from "../coletores
 import { abrirColeta, fecharColeta } from "../dados/coletas.js";
 import { gravarAgregadosDiarios } from "../dados/diario.js";
 import { gravarAgregados } from "../dados/mensal.js";
-import { gravarSnapshot, lerSnapshotAnterior } from "../dados/ro-snapshots.js";
+import { gravarSnapshot, lerHistoricoSnapshots } from "../dados/ro-snapshots.js";
 import { calcularDiferencaDiaria } from "../diario/diferenca.js";
 
 const CHAVE_PADRAO = "31c7b0f6-5ede-4358-be35-b8fc49ac0ab1";
@@ -55,10 +55,12 @@ export const coletorRo = task({
           const snapshotHoje = { FEMEA: 0, MACHO: 0 };
           for (const a of agregados) snapshotHoje[a.sexo] = a.quantidade;
 
-          const anterior = await lerSnapshotAnterior({ competencia, antesDe: hoje });
+          // Histórico, não só o retrato de ontem: o painel congela no fim de
+          // semana e o ganho de segunda-feira cobre desde a última publicação.
+          const historico = await lerHistoricoSnapshots({ competencia, antesDe: hoje });
           const diferenca = calcularDiferencaDiaria({
             snapshotHoje,
-            anterior,
+            historico,
             capturadoEm: hoje,
           });
           for (const anomalia of diferenca.anomalias) {

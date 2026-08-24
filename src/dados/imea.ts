@@ -36,6 +36,15 @@ export async function gravarMensalImea(args: {
     atuais.length === 0 ? null : atuais.reduce((soma, l) => soma + l.quantidade, 0);
   const totalImea = args.machos + args.femeas;
 
+  // Nada mudou: não regrava e, principalmente, não alerta. Sem esta linha o
+  // coletor reescrevia as MESMAS linhas toda semana e disparava "atualizado
+  // para X (era X)" ao operador — ruído que treina o dono a ignorar alerta.
+  const quantidadeDe = (sexo: string) => (sexo === "FEMEA" ? args.femeas : args.machos);
+  const jaIgual =
+    atuais.length === 2 &&
+    atuais.every((l) => l.fonte === "imea" && l.quantidade === quantidadeDe(l.sexo));
+  if (jaIgual) return { gravou: false, totalAnterior };
+
   const pode =
     atuais.length === 0 ||
     atuais.every((l) => l.fonte === "imea") ||
