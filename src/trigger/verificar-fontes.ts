@@ -45,10 +45,20 @@ export const verificarFontes = schedules.task({
 async function executar() {
   const problemas: string[] = [];
 
-  // --- IDARON: só a chave TROCADA é problema. Não achar o link (site fora,
-  // --- layout novo) não é: o coletor segue com a chave padrão, que funciona.
-  const urlRo = await descobrirRelatorio();
-  const chaveRo = urlRo ? extrairChaveRecurso(urlRo) : null;
+  // --- IDARON: só a chave TROCADA é problema. Não achar o link não é — e
+  // --- "não achar" inclui a página EXPLODIR: o site do IDARON recusa a nuvem
+  // --- estrangeira (mesmo geo-bloqueio do CEPEA e do IMEA), então daqui o
+  // --- fetch falha toda semana. A coleta do RO não passa por essa página; ela
+  // --- fala com o Power BI, que responde normalmente. Rede não é notícia.
+  let chaveRo: string | null = null;
+  try {
+    const urlRo = await descobrirRelatorio();
+    chaveRo = urlRo ? extrairChaveRecurso(urlRo) : null;
+  } catch (erro) {
+    logger.warn("IDARON: página inacessível daqui — coleta segue com a chave padrão", {
+      erro: erro instanceof Error ? erro.message : String(erro),
+    });
+  }
   if (!chaveRo) {
     logger.warn("IDARON: não achei o link do Power BI na página — coleta segue com a chave padrão");
   } else if (chaveRo !== CHAVE_RO_CONHECIDA) {
@@ -62,9 +72,16 @@ async function executar() {
   if (apiKey) {
     const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
     const anos = anosParaVarrer(Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7)));
-    const pastas = await Promise.all(anos.map((ano) => encontrarPastaDoAno(ano, apiKey)));
-    if (pastas.every((p) => p === null)) {
-      problemas.push(`ADEPARA: não encontrei no Drive a pasta de GTAs de ${anos.join(" nem de ")}`);
+    try {
+      const pastas = await Promise.all(anos.map((ano) => encontrarPastaDoAno(ano, apiKey)));
+      if (pastas.every((p) => p === null)) {
+        problemas.push(`ADEPARA: não encontrei no Drive a pasta de GTAs de ${anos.join(" nem de ")}`);
+      }
+    } catch (erro) {
+      // Mesma regra: Drive fora do ar é rede, não mudança de identificador.
+      logger.warn("ADEPARA: Drive inacessível nesta verificação", {
+        erro: erro instanceof Error ? erro.message : String(erro),
+      });
     }
   }
 

@@ -113,17 +113,33 @@ const MESES_CHAVE = MESES.map(semAcento);
 const rotuloPt = (m: { ano: number; mes: number }) => `${MESES[m.mes - 1]} de ${m.ano}`;
 
 /**
- * O mês que o PDF carimba no cabeçalho ("Mês de referência: Julho de 2026"),
- * ou null se não achar. O pdf.js corta o cabeçalho em dois itens ("Mês de
- * referência:" e "Julho de 2026"), então a busca é no texto da página inteira
- * remontado, não item a item.
+ * O mês que o PDF carimba, ou null se não achar.
+ *
+ * O IMEA mudou o layout no meio da série e as duas formas convivem:
+ *   jul/26 em diante — "Mês de referência: Julho de 2026"
+ *   até jun/26       — no título, "RELATÓRIO DE ABATES MAIO/26" (ano com 2
+ *                      dígitos, e o pdf.js às vezes separa a barra: "JUNHO / 26")
+ * Reconhecer só a primeira reprovava todo relatório anterior a julho.
+ *
+ * A busca é no texto da página remontado, não item a item: o pdf.js corta o
+ * cabeçalho em pedaços ("Mês de referência:" + "Julho de 2026").
  */
 export function mesDeReferencia(itens: ItemTexto[]): { ano: number; mes: number } | null {
   const texto = semAcento(itens.map((i) => i.str).join(" ")).replace(/\s+/g, " ");
-  const achado = /mes de referencia:? ([a-z]+) de (\d{4})/.exec(texto);
-  if (!achado) return null;
-  const mes = MESES_CHAVE.indexOf(achado[1]!) + 1;
-  return mes === 0 ? null : { ano: Number(achado[2]), mes };
+  const padroes = [
+    /mes de referencia:? ([a-z]+) de (\d{4})/,
+    /relatorio de abates ([a-z]+) ?\/ ?(\d{2,4})/,
+  ];
+  for (const padrao of padroes) {
+    const achado = padrao.exec(texto);
+    if (!achado) continue;
+    const mes = MESES_CHAVE.indexOf(achado[1]!) + 1;
+    if (mes === 0) continue;
+    const bruto = Number(achado[2]);
+    // "26" é 2026, não o ano 26 — o relatório começou em 2024.
+    return { ano: bruto < 100 ? 2000 + bruto : bruto, mes };
+  }
+  return null;
 }
 
 /**
