@@ -2,7 +2,7 @@ import { AbortTaskRunError, logger, task } from "@trigger.dev/sdk";
 import { CredencialInvalidaError, atribuirDia, coletarMt } from "../coletores/mt.js";
 import { abrirColeta, coletaVaziaSuspeita, fecharColeta } from "../dados/coletas.js";
 import { arquivarBruto } from "../dados/arquivos.js";
-import { gravarAgregados } from "../dados/mensal.js";
+import { congeladoDesde, gravarAgregados } from "../dados/mensal.js";
 import { gravarAgregadosDiarios } from "../dados/diario.js";
 import { alertarOperador } from "../notificacao/alertas.js";
 import type { TipoColeta } from "../tipos.js";
@@ -91,11 +91,20 @@ export const coletorMt = task({
       // para sempre — a condição de detectar congelamento não pode depender de
       // a rede ter colaborado.
       if (diasVazios === diasDiario && diasDiario > 0) {
+        // A duração vai no ASSUNTO de propósito: problema crônico com texto
+        // fixo era suprimido como repetição e o silêncio passava a ler como
+        // "voltou a funcionar" — foi o que aconteceu em 25/08. Com o número de
+        // dias, cada manhã é notícia nova e o operador vê a coisa piorando.
+        const congelado = await congeladoDesde({ uf: "MT", ano: payload.ano, mes: payload.mes });
+        const quanto = congelado ? ` há ${congelado.dias} dia(s)` : "";
+        const desde = congelado ? ` O último número novo é de ${congelado.desde}.` : "";
         await alertarOperador(
-          "MT: relatório responde, mas o dado está CONGELADO",
+          `MT: dado CONGELADO${quanto} (o relatório responde, mas vem vazio)`,
           `Os últimos ${diasDiario} dias sondados vieram vazios no GTA Condensado — o banco do ` +
-            "InfoSindesa não recebe as guias do SINDESA novo. O mensal do MT está parado " +
-            "no valor da migração (06/08). A solução é integrar o SINDESA novo.",
+            "InfoSindesa não recebe as guias do SINDESA novo." +
+            desde +
+            " O mensal do MT continua coberto pelo IMEA; o diário fica sem fonte até " +
+            "o INDEA destravar o portal ou o SINDESA novo abrir consulta.",
         );
       }
 

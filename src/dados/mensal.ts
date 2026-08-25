@@ -83,8 +83,7 @@ export async function gravarAgregados(
   // punhado de linhas 'imea' e o pareamento exato é feito aqui embaixo.
   const { data, error: erroLeitura } = await cliente
     .from("peciclo_abate_mensal")
-    .select("uf, ano, mes, finalidade, quantidade")
-    .eq("fonte", "imea")
+    .select("uf, ano, mes, finalidade, sexo, quantidade, fonte")
     .in("uf", [...new Set(agregados.map((a) => a.uf))])
     .in("ano", [...new Set(agregados.map((a) => a.ano))])
     .in("mes", [...new Set(agregados.map((a) => a.mes))]);
@@ -92,16 +91,26 @@ export async function gravarAgregados(
     throw new Error(`Falha ao ler o mensal atual antes de gravar: ${erroLeitura.message}`);
   }
 
+  const atuais = (data ?? []) as Array<AgregadoMensal & { fonte: string }>;
   const totalImea = new Map<string, number>();
-  for (const l of (data ?? []) as AgregadoMensal[]) {
+  for (const l of atuais.filter((l) => l.fonte === "imea")) {
     totalImea.set(universoDe(l), (totalImea.get(universoDe(l)) ?? 0) + l.quantidade);
   }
+  // Quantidade já gravada, por linha exata — para não reescrever o que não
+  // mudou (ver o filtro de `aGravar`).
+  const jaGravado = new Map<string, number>();
+  for (const l of atuais) jaGravado.set(`${universoDe(l)}|${l.sexo}`, l.quantidade);
   const totalNovo = new Map<string, number>();
   for (const a of agregados) {
     totalNovo.set(universoDe(a), (totalNovo.get(universoDe(a)) ?? 0) + a.quantidade);
   }
 
   const aGravar = agregados.filter((a) => {
+    // Valor idêntico ao que já está lá não é gravação: reescrever só mexeria
+    // no `atualizado_em`, e é dele que sai "desde quando este número não muda"
+    // — o sinal que o vigia do MT usa para dizer há quantos dias a fonte está
+    // congelada. Carimbo que se renova sozinho todo dia não informa nada.
+    if (jaGravado.get(`${universoDe(a)}|${a.sexo}`) === a.quantidade) return false;
     const imea = totalImea.get(universoDe(a));
     return imea === undefined || totalNovo.get(universoDe(a))! > imea;
   });
@@ -157,4 +166,35 @@ export async function lerAbateMensal(): Promise<LinhaMensal[]> {
         .range(de, ate) as never,
     "abate mensal",
   );
+}
+
+/**
+ * Há quantos dias o número de uma competência não muda, e desde quando.
+ *
+ * Só faz sentido porque `gravarAgregados` deixou de reescrever linha idêntica:
+ * `atualizado_em` marca a última vez que o VALOR mudou, não a última vez que
+ * alguém olhou. É o que permite o alerta dizer "congelado há 19 dias" em vez de
+ * repetir o mesmo texto todo dia — e é o que faz o alerta voltar a ser notícia
+ * a cada manhã, escapando da supressão de repetidos por mérito, não por burla.
+ */
+export async function congeladoDesde(args: {
+  uf: UF;
+  ano: number;
+  mes: number;
+}): Promise<{ desde: string; dias: number } | null> {
+  const { data, error } = await obterCliente()
+    .from("peciclo_abate_mensal")
+    .select("atualizado_em")
+    .eq("uf", args.uf)
+    .eq("ano", args.ano)
+    .eq("mes", args.mes)
+    .eq("finalidade", "ABATE")
+    .order("atualizado_em", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const desde = String((data as { atualizado_em: string }).atualizado_em);
+  const dias = Math.floor((Date.now() - new Date(desde).getTime()) / 86_400_000);
+  return { desde: desde.slice(0, 10), dias };
 }

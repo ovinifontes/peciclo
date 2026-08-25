@@ -30,7 +30,15 @@ describe("competenciasDaJanela", () => {
 
 // --- gravarAgregados: guarda contra rebaixar número do IMEA -----------------
 
-type LinhaImea = { uf: string; ano: number; mes: number; finalidade: string; quantidade: number };
+type LinhaImea = {
+  uf: string;
+  ano: number;
+  mes: number;
+  finalidade: string;
+  sexo: string;
+  quantidade: number;
+  fonte: string;
+};
 
 let linhasImea: LinhaImea[];
 const upsert = vi.fn();
@@ -66,8 +74,8 @@ const ro = (sexo: "MACHO" | "FEMEA", quantidade: number): AgregadoMensal => ({
 });
 /** As 609.829 cabeças de MT 08/2026 que o IMEA já gravou. */
 const imeaMt = [
-  { uf: "MT", ano: 2026, mes: 8, finalidade: "ABATE", quantidade: 346_689 },
-  { uf: "MT", ano: 2026, mes: 8, finalidade: "ABATE", quantidade: 263_140 },
+  { uf: "MT", ano: 2026, mes: 8, finalidade: "ABATE", sexo: "MACHO", quantidade: 346_689, fonte: "imea" },
+  { uf: "MT", ano: 2026, mes: 8, finalidade: "ABATE", sexo: "FEMEA", quantidade: 263_140, fonte: "imea" },
 ];
 const linhasGravadas = () => upsert.mock.calls[0]?.[0] as { quantidade: number }[] | undefined;
 
@@ -93,6 +101,28 @@ describe("gravarAgregados — não rebaixa o número do IMEA", () => {
     // cliente REGREDIR e o IMEA regravar na segunda seguinte (ping-pong).
     await gravarAgregados([mt("MACHO", 90_000), mt("FEMEA", 60_000)], 7, "gta_condensada");
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("não reescreve linha de valor idêntico — o carimbo tem de guardar a última MUDANÇA", async () => {
+    // Sem isto, `atualizado_em` se renova todo dia mesmo com a fonte congelada
+    // e ninguém consegue dizer há quantos dias o número não anda — foi o que
+    // deixou o alerta do MT sem "há N dias" e o silêncio virar falso alívio.
+    linhasImea = [
+      { uf: "RO", ano: 2026, mes: 8, finalidade: "ABATE", sexo: "MACHO", quantidade: 50, fonte: "powerbi" },
+      { uf: "RO", ano: 2026, mes: 8, finalidade: "ABATE", sexo: "FEMEA", quantidade: 40, fonte: "powerbi" },
+    ];
+    await gravarAgregados([ro("MACHO", 50), ro("FEMEA", 40)], 7, "powerbi");
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("grava o sexo que mudou e deixa quieto o que não mudou", async () => {
+    linhasImea = [
+      { uf: "RO", ano: 2026, mes: 8, finalidade: "ABATE", sexo: "MACHO", quantidade: 50, fonte: "powerbi" },
+      { uf: "RO", ano: 2026, mes: 8, finalidade: "ABATE", sexo: "FEMEA", quantidade: 40, fonte: "powerbi" },
+    ];
+    await gravarAgregados([ro("MACHO", 50), ro("FEMEA", 41)], 7, "powerbi");
+    expect(linhasGravadas()).toHaveLength(1);
+    expect(linhasGravadas()![0]!.quantidade).toBe(41);
   });
 
   it("grava quando a recoleta do mesmo mês supera o total do IMEA", async () => {
