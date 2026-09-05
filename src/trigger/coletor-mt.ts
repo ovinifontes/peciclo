@@ -95,7 +95,9 @@ export const coletorMt = task({
         // fixo era suprimido como repetição e o silêncio passava a ler como
         // "voltou a funcionar" — foi o que aconteceu em 25/08. Com o número de
         // dias, cada manhã é notícia nova e o operador vê a coisa piorando.
-        const congelado = await congeladoDesde({ uf: "MT", ano: payload.ano, mes: payload.mes });
+        // Pela FONTE (o GTA Condensado do INDEA), não pela competência: em
+        // setembro não há linha de MT nenhuma, e medir pelo mês devolvia null.
+        const congelado = await congeladoDesde({ uf: "MT", fonte: "gta_condensada" });
         const quanto = congelado ? ` há ${congelado.dias} dia(s)` : "";
         const desde = congelado ? ` O último número novo é de ${congelado.desde}.` : "";
         await alertarOperador(

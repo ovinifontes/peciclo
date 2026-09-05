@@ -169,7 +169,13 @@ export async function lerAbateMensal(): Promise<LinhaMensal[]> {
 }
 
 /**
- * Há quantos dias o número de uma competência não muda, e desde quando.
+ * Há quantos dias a FONTE não produz número novo, e desde quando.
+ *
+ * Mede pela fonte e não pela competência de propósito: na virada do mês a
+ * fonte morta não cria linha nenhuma para o mês novo, e uma medição por
+ * competência devolvia null justo quando o problema estava pior — o alerta
+ * perdia a contagem, virava texto fixo e a supressão de repetidos o engolia
+ * por 3 dias (aconteceu em 01-03/09/2026).
  *
  * Só faz sentido porque `gravarAgregados` deixou de reescrever linha idêntica:
  * `atualizado_em` marca a última vez que o VALOR mudou, não a última vez que
@@ -179,15 +185,14 @@ export async function lerAbateMensal(): Promise<LinhaMensal[]> {
  */
 export async function congeladoDesde(args: {
   uf: UF;
-  ano: number;
-  mes: number;
+  /** Fonte que se quer medir — o congelamento é DELA, não do mês. */
+  fonte: string;
 }): Promise<{ desde: string; dias: number } | null> {
   const { data, error } = await obterCliente()
     .from("peciclo_abate_mensal")
     .select("atualizado_em")
     .eq("uf", args.uf)
-    .eq("ano", args.ano)
-    .eq("mes", args.mes)
+    .eq("fonte", args.fonte)
     .eq("finalidade", "ABATE")
     .order("atualizado_em", { ascending: false })
     .limit(1)
