@@ -4,7 +4,10 @@ import dynamic from "next/dynamic";
 import { useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 
 import type { LinhaMensal } from "@/lib/dados";
+import CabecalhoVisoes from "./cabecalho-visoes";
 import { COR_UF, NOME_UF, UFS_GRAFICO, type LinhaGrafico, type UF } from "./estados";
+import { serieSomadaPorSexo, type EntradaSexo, type PontoSexo } from "./serie-sexo";
+import { ehPorSexo, ROTULO_VER, temDuasSecoes, VISOES, type Ver } from "./visoes";
 import Exportavel from "./exportavel";
 
 const MESES = [
@@ -36,13 +39,17 @@ const GraficoColunas = dynamic(() => import("./colunas-estados-recharts"), {
   loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
 });
 
-export type Ver = "tabela" | "linhas" | "colunas";
+const GraficoArea = dynamic(() => import("./area-sexo-recharts"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
+});
 
-const ROTULO_VER: Record<Ver, string> = {
-  tabela: "Tabela",
-  linhas: "Linhas",
-  colunas: "Colunas",
-};
+const GraficoCemPorCento = dynamic(() => import("./cem-por-cento-recharts"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
+});
+
+export type { Ver } from "./visoes";
 
 /** Fêmeas e machos de um estado num mês, somados da série crua. */
 interface CelulaMes {
@@ -132,6 +139,17 @@ function linhasDoGrafico(
   });
 }
 
+/** Achata os meses agregados no formato que `serieSomadaPorSexo` consome. */
+function entradasDeSexo(meses: MesAgregado[]): EntradaSexo[] {
+  const saida: EntradaSexo[] = [];
+  for (const m of meses) {
+    for (const [uf, celula] of Object.entries(m.porUf)) {
+      saida.push({ rotulo: m.competencia, chave: m.chave, uf: uf as UF, celula });
+    }
+  }
+  return saida;
+}
+
 interface Indicadores {
   /** "julho de 2026" — a competência dos números, dita em todos os cartões. */
   competencia: string | null;
@@ -195,14 +213,16 @@ export default function Explorador({
   serie,
   mesCorrente,
   verInicial,
-  cabecalho,
+  titulo,
+  descricao,
   tabela,
 }: {
   serie: LinhaMensal[];
   /** "2026-08", calculado no servidor (fuso de Brasília). */
   mesCorrente: string;
   verInicial: Ver;
-  cabecalho: ReactNode;
+  titulo: string;
+  descricao: ReactNode;
   tabela: ReactNode;
 }) {
   const [ver, setVer] = useState<Ver>(verInicial);
@@ -230,7 +250,16 @@ export default function Explorador({
   const linhasTotal = linhasDoGrafico(mesesDoGrafico, ufsAtivas, "total");
   const linhasPct = linhasDoGrafico(mesesDoGrafico, ufsAtivas, "pct");
 
-  // As duas visões de gráfico têm a mesma casca (filtro, KPIs, títulos, notas);
+  // Área e 100% somam os estados e separam por sexo. Partem de `mesesVisiveis`
+  // e não de `mesesDoGrafico`: o corte de 12 meses existe para barras
+  // AGRUPADAS por estado ficarem legíveis, e a pilha de duas faixas não tem
+  // esse problema.
+  const pontosSexo = useMemo(
+    () => serieSomadaPorSexo(entradasDeSexo(mesesVisiveis), ufsAtivas),
+    [mesesVisiveis, ufsAtivas],
+  );
+
+  // As visões por ESTADO compartilham a casca (filtro, KPIs, títulos, notas);
   // só o desenho muda — linhas contínuas ou barras agrupadas.
   const CorpoGrafico = ver === "colunas" ? GraficoColunas : GraficoLinhas;
 
@@ -297,49 +326,81 @@ export default function Explorador({
       : { ufs: ufsAtivas, ind }
     : null;
 
+  /**
+   * O corpo do gráfico — o MESMO nas duas saídas, tela e cartão de exportação.
+   * Eram dois trechos iguais e, no dia em que divergissem, a foto deixaria de
+   * ser o que está na tela. Os KPIs ficam de fora do cartão porque o
+   * `Exportavel` já os desenha na moldura dele — incluí-los aqui os
+   * imprimia duas vezes no PNG.
+   */
+  function corpoGrafico(indicadores: Indicadores, comKpis: boolean): ReactNode {
+    if (ehPorSexo(ver)) {
+      if (pontosSexo.length === 0) {
+        return (
+          <p className="text-sm text-neutral-600">
+            Nenhum mês fechado por <strong>todos</strong> os estados selecionados — estas duas
+            visões somam os estados, e somar mês incompleto desenharia uma queda que não existe.
+          </p>
+        );
+      }
+      const Corpo = ver === "area" ? GraficoArea : GraficoCemPorCento;
+      return (
+        <>
+          {comKpis && (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{cartoesKpi(indicadores)}</div>
+          )}
+          <div>
+            <h3 className="text-sm font-medium text-neutral-800">
+              {ver === "area"
+                ? "Cabeças abatidas por mês, por sexo"
+                : "Composição do abate por mês"}
+            </h3>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Soma de {ufsAtivas.join(" + ")} — só os meses que todos publicaram.
+            </p>
+            <div className="mt-2 h-[280px] w-full">
+              <Corpo pontos={pontosSexo} animar={!exportando} />
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (mesesVisiveis.length === 0) {
+      return (
+        <p className="text-sm text-neutral-600">
+          Nenhum mês fechado para os estados selecionados — nada para desenhar ainda.
+        </p>
+      );
+    }
+    return (
+      <>
+        {comKpis && (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{cartoesKpi(indicadores)}</div>
+        )}
+        <SecoesGrafico
+          Corpo={CorpoGrafico}
+          ufs={ufsAtivas}
+          linhasTotal={linhasTotal}
+          linhasPct={linhasPct}
+          cortadas={colunasCortadas}
+          mesCorrente={mesCorrente}
+        />
+      </>
+    );
+  }
+
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 flex-1 basis-64">{cabecalho}</div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <div
-            role="group"
-            aria-label="Modo de visualização"
-            className="inline-flex overflow-hidden rounded-full border"
-          >
-            {(["tabela", "linhas", "colunas"] as const).map((opcao) => (
-              <button
-                key={opcao}
-                type="button"
-                aria-pressed={ver === opcao}
-                onClick={() => mudarVer(opcao)}
-                className={`px-4 py-1.5 text-xs font-medium uppercase tracking-[0.12em] transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ouro)] ${
-                  ver === opcao
-                    ? "bg-[var(--verde)] text-white"
-                    : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800"
-                }`}
-              >
-                {ROTULO_VER[opcao]}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {erroExportar && (
-              <span role="alert" className="text-xs text-[#93402c]">
-                {erroExportar}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={exportar}
-              disabled={exportando}
-              className="text-xs text-neutral-500 underline underline-offset-2 transition-colors hover:text-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ouro)] disabled:cursor-wait disabled:no-underline"
-            >
-              {exportando ? "gerando…" : "Exportar imagem"}
-            </button>
-          </div>
-        </div>
-      </div>
+      <CabecalhoVisoes
+        titulo={titulo}
+        ver={ver}
+        aoTrocar={mudarVer}
+        aoExportar={exportar}
+        exportando={exportando}
+        erroExportar={erroExportar}
+        descricao={descricao}
+      />
 
       <div className="mt-4">
         {ver === "tabela" ? (
@@ -375,23 +436,7 @@ export default function Explorador({
               })}
             </div>
 
-            {mesesVisiveis.length === 0 ? (
-              <p className="text-sm text-neutral-600">
-                Nenhum mês fechado para os estados selecionados — nada para desenhar ainda.
-              </p>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{cartoesKpi(ind)}</div>
-                <SecoesGrafico
-                  Corpo={CorpoGrafico}
-                  ufs={ufsAtivas}
-                  linhasTotal={linhasTotal}
-                  linhasPct={linhasPct}
-                  cortadas={colunasCortadas}
-                  mesCorrente={mesCorrente}
-                />
-              </>
-            )}
+            {corpoGrafico(ind, true)}
           </div>
         )}
       </div>
@@ -405,22 +450,7 @@ export default function Explorador({
           ufs={cartao.ufs}
           kpis={cartoesKpi(cartao.ind)}
         >
-          {ver === "tabela" ? (
-            tabela
-          ) : mesesVisiveis.length === 0 ? (
-            <p className="text-sm text-neutral-600">
-              Nenhum mês fechado para os estados selecionados — nada para desenhar ainda.
-            </p>
-          ) : (
-            <SecoesGrafico
-              Corpo={CorpoGrafico}
-              ufs={ufsAtivas}
-              linhasTotal={linhasTotal}
-              linhasPct={linhasPct}
-              cortadas={colunasCortadas}
-              mesCorrente={mesCorrente}
-            />
-          )}
+          {ver === "tabela" ? tabela : corpoGrafico(cartao.ind, false)}
         </Exportavel>
       )}
     </>

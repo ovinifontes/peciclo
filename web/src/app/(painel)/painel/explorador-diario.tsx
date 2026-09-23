@@ -17,7 +17,9 @@ import {
   type PontoDiario,
 } from "../../../../../src/diario/serie";
 import { COR_UF, NOME_UF, type UF } from "./estados";
-import type { Ver } from "./explorador";
+import CabecalhoVisoes from "./cabecalho-visoes";
+import { serieSomadaPorSexo, type EntradaSexo } from "./serie-sexo";
+import { ehPorSexo, ROTULO_VER, type Ver } from "./visoes";
 import Exportavel from "./exportavel";
 
 const inteiro = new Intl.NumberFormat("pt-BR");
@@ -42,13 +44,18 @@ const GraficoColunas = dynamic(() => import("./colunas-diario-recharts"), {
   loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
 });
 
-// Exportado para a página de impressão (`/impressao-diario/[visao]`), que
-// monta o MESMO cartão do export manual com os MESMOS rótulos.
-export const ROTULO_VER: Record<Ver, string> = {
-  tabela: "Tabela",
-  linhas: "Linhas",
-  colunas: "Colunas",
-};
+const GraficoArea = dynamic(() => import("./area-sexo-recharts"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
+});
+
+const GraficoCemPorCento = dynamic(() => import("./cem-por-cento-recharts"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded bg-neutral-100" />,
+});
+
+// Reexportado para a página de impressão, que sempre importou daqui.
+export { ROTULO_VER } from "./visoes";
 
 /** Chave de série do gráfico diário: o dia cru ("MS") ou a MM7 dele ("MSMm7"). */
 type ChaveSerie = UF | `${UF}Mm7`;
@@ -114,7 +121,8 @@ export default function ExploradorDiario({
   pontos,
   cortes,
   verInicial,
-  cabecalho,
+  titulo,
+  descricao,
   tabela,
 }: {
   /** A série pronta (dia cru + MM7), calculada no servidor por `serie.ts`. */
@@ -122,7 +130,8 @@ export default function ExploradorDiario({
   /** Cortes ISO calculados no servidor: 180 dias (linhas), 14 (colunas), 7 (assentando). */
   cortes: { linhas: string; colunas: string; assentando: string };
   verInicial: Ver;
-  cabecalho: ReactNode;
+  titulo: string;
+  descricao: ReactNode;
   tabela: ReactNode;
 }) {
   const [ver, setVer] = useState<Ver>(verInicial);
@@ -156,6 +165,16 @@ export default function ExploradorDiario({
 
   const linhasTotal = linhasDoGrafico(pontosJanela, ufsAtivas, "total", ver !== "colunas");
   const linhasPct = linhasDoGrafico(pontosJanela, ufsAtivas, "pct", ver !== "colunas");
+
+  const pontosSexo = useMemo(() => {
+    const entradas: EntradaSexo[] = pontosJanela.map((ponto) => ({
+      rotulo: rotuloDia(ponto.data),
+      chave: ponto.data,
+      uf: ponto.uf,
+      celula: { femeas: ponto.femeas, machos: ponto.machos },
+    }));
+    return serieSomadaPorSexo(entradas, ufsAtivas);
+  }, [pontosJanela, ufsAtivas]);
 
   // A faixa "assentando": do primeiro dia visível dentro dos últimos 7 até o
   // fim da série — é o trecho que a rejanela semanal ainda reprocessa.
@@ -230,49 +249,79 @@ export default function ExploradorDiario({
       : { ufs: ufsAtivas, ind }
     : null;
 
+  /**
+   * O corpo do gráfico — o MESMO na tela e no cartão de exportação. Os KPIs
+   * só entram na tela: no cartão, o `Exportavel` já os desenha na moldura.
+   */
+  function corpoGrafico(indicadores: IndicadoresDiarios, comKpis: boolean): ReactNode {
+    if (ehPorSexo(ver)) {
+      if (pontosSexo.length === 0) {
+        return (
+          <p className="text-sm text-neutral-600">
+            Nenhum dia fechado por <strong>todos</strong> os estados selecionados — estas duas
+            visões somam os estados, e somar dia incompleto desenharia uma queda que não existe.
+          </p>
+        );
+      }
+      const Corpo = ver === "area" ? GraficoArea : GraficoCemPorCento;
+      return (
+        <>
+          {comKpis && (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {cartoesKpiDiario(indicadores, cortes.assentando)}
+            </div>
+          )}
+          <div>
+            <h3 className="text-sm font-medium text-neutral-800">
+              {ver === "area" ? "Cabeças abatidas por dia, por sexo" : "Composição do abate por dia"}
+            </h3>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Soma de {ufsAtivas.join(" + ")} — só os dias que todos publicaram.
+            </p>
+            <div className="mt-2 h-[280px] w-full">
+              <Corpo pontos={pontosSexo} animar={!exportando} />
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (diasVisiveis.length === 0) {
+      return (
+        <p className="text-sm text-neutral-600">
+          Nenhum dia com dado para os estados selecionados — nada para desenhar ainda.
+        </p>
+      );
+    }
+    return (
+      <>
+        {comKpis && (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {cartoesKpiDiario(indicadores, cortes.assentando)}
+          </div>
+        )}
+        <SecoesGraficoDiario
+          ver={ver}
+          ufs={ufsAtivas}
+          linhasTotal={linhasTotal}
+          linhasPct={linhasPct}
+          assentando={assentando}
+        />
+      </>
+    );
+  }
+
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 flex-1 basis-64">{cabecalho}</div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <div
-            role="group"
-            aria-label="Modo de visualização do diário"
-            className="inline-flex overflow-hidden rounded-full border"
-          >
-            {(["tabela", "linhas", "colunas"] as const).map((opcao) => (
-              <button
-                key={opcao}
-                type="button"
-                aria-pressed={ver === opcao}
-                onClick={() => mudarVer(opcao)}
-                className={`px-4 py-1.5 text-xs font-medium uppercase tracking-[0.12em] transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ouro)] ${
-                  ver === opcao
-                    ? "bg-[var(--verde)] text-white"
-                    : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800"
-                }`}
-              >
-                {ROTULO_VER[opcao]}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {erroExportar && (
-              <span role="alert" className="text-xs text-[#93402c]">
-                {erroExportar}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={exportar}
-              disabled={exportando}
-              className="text-xs text-neutral-500 underline underline-offset-2 transition-colors hover:text-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ouro)] disabled:cursor-wait disabled:no-underline"
-            >
-              {exportando ? "gerando…" : "Exportar imagem"}
-            </button>
-          </div>
-        </div>
-      </div>
+      <CabecalhoVisoes
+        titulo={titulo}
+        ver={ver}
+        aoTrocar={mudarVer}
+        aoExportar={exportar}
+        exportando={exportando}
+        erroExportar={erroExportar}
+        descricao={descricao}
+      />
 
       <div className="mt-4">
         {ver === "tabela" ? (
@@ -308,24 +357,7 @@ export default function ExploradorDiario({
               })}
             </div>
 
-            {diasVisiveis.length === 0 ? (
-              <p className="text-sm text-neutral-600">
-                Nenhum dia com dado para os estados selecionados — nada para desenhar ainda.
-              </p>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {cartoesKpiDiario(ind, cortes.assentando)}
-                </div>
-                <SecoesGraficoDiario
-                  ver={ver}
-                  ufs={ufsAtivas}
-                  linhasTotal={linhasTotal}
-                  linhasPct={linhasPct}
-                  assentando={assentando}
-                />
-              </>
-            )}
+            {corpoGrafico(ind, true)}
           </div>
         )}
       </div>
@@ -340,21 +372,7 @@ export default function ExploradorDiario({
           ufs={cartao.ufs}
           kpis={cartoesKpiDiario(cartao.ind, cortes.assentando)}
         >
-          {ver === "tabela" ? (
-            tabela
-          ) : diasVisiveis.length === 0 ? (
-            <p className="text-sm text-neutral-600">
-              Nenhum dia com dado para os estados selecionados — nada para desenhar ainda.
-            </p>
-          ) : (
-            <SecoesGraficoDiario
-              ver={ver}
-              ufs={ufsAtivas}
-              linhasTotal={linhasTotal}
-              linhasPct={linhasPct}
-              assentando={assentando}
-            />
-          )}
+          {ver === "tabela" ? tabela : corpoGrafico(cartao.ind, false)}
         </Exportavel>
       )}
     </>

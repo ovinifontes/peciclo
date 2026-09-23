@@ -9,14 +9,15 @@ import {
   lerAbateDiario,
   serieComMm7,
 } from "@/lib/dados";
+import { ehVisao } from "@/app/(painel)/painel/visoes";
 import CartaoImpressaoDiario from "./cartao-impressao";
 
-const VISOES = ["tabela", "linhas", "colunas"] as const;
-type Visao = (typeof VISOES)[number];
-
-function ehVisao(valor: string): valor is Visao {
-  return (VISOES as readonly string[]).includes(valor);
-}
+// A lista mora em `painel/visoes.ts`, com os rótulos e o resto do contrato.
+// Duplicá-la aqui já custou: uma visão nova entrava no painel e esta rota
+// devolvia 404 para ela, quebrando a imagem só no dia seguinte de manhã.
+//
+// Aceitar as cinco NÃO muda o que o robô das 6h52 manda: a lista dele é
+// `VISOES_DO_ENVIO_DIARIO`, e continua em três.
 
 /**
  * A página que o robô do envio diário fotografa: SÓ o cartão exportável da

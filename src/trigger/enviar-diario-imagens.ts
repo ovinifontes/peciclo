@@ -11,7 +11,15 @@ import {
 } from "../dados/perfis.js";
 import { imagensJaEnviadas, marcarImagensEnviadas } from "../dados/envios-imagens.js";
 
-/** As três visões do cartão diário, na ordem em que chegam no WhatsApp. */
+/**
+ * As visões do cartão diário que vão para o WhatsApp, na ordem em que chegam.
+ *
+ * O painel tem CINCO formatos (Tabela, Linhas, Colunas, Área, 100%) e a rota
+ * `/impressao-diario/[visao]` aceita todos, para o botão "Exportar imagem"
+ * funcionar em qualquer um. Esta lista fica em TRÊS de propósito: cinco
+ * imagens por dia no WhatsApp de um cliente é spam. Aumentar aqui é decisão
+ * de produto, não consequência de ter mais um gráfico.
+ */
 const VISOES = [
   { visao: "tabela", rotulo: "Tabela" },
   { visao: "linhas", rotulo: "Linhas" },

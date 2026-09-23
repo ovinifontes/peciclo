@@ -13,6 +13,7 @@ import {
   type PontoCiclo,
 } from "@/lib/dados";
 import Explorador from "./explorador";
+import { ehVisao } from "./visoes";
 import ExploradorDiario from "./explorador-diario";
 import GraficoFemeas, { type PontoGrafico } from "./grafico-femeas";
 import TabelaMensal from "./tabela";
@@ -232,15 +233,11 @@ export default async function Painel({
               colunas: diasAntes(hoje, 14),
               assentando: diasAntes(hoje, 7),
             }}
-            verInicial={
-              verDiario === "colunas" ? "colunas" : verDiario === "linhas" ? "linhas" : "tabela"
-            }
-            cabecalho={
+            verInicial={verDiario && ehVisao(verDiario) ? verDiario : "tabela"}
+            titulo="Abate diário por estado"
+            descricao={
               <>
-                <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-                  Abate diário por estado
-                </p>
-                <p className="mt-1 text-sm text-neutral-600">
+                <p>
                   O <strong>MS</strong> publica o abate por dia. O <strong>RO</strong> entra
                   por estimativa: o painel da IDARON publica o mês acumulado, e o dia é a
                   variação entre duas manhãs — guia registrada com atraso cai no dia em que
@@ -266,19 +263,13 @@ export default async function Painel({
           mesCorrente={mesCorrente}
           // `graficos` é o valor antigo da URL, de quando só havia uma visão de
           // gráficos — links e favoritos com ele caem nas Linhas.
-          verInicial={
-            ver === "colunas" ? "colunas" : ver === "linhas" || ver === "graficos" ? "linhas" : "tabela"
-          }
-          cabecalho={
-            <>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-                Abate mensal por estado
-              </p>
-              <p className="mt-1 text-sm text-neutral-600">
-                O dado cru por trás de tudo acima, estado por estado e sexo por sexo, incluindo
-                os meses que ainda não passaram no teste de completude do consolidado.
-              </p>
-            </>
+          verInicial={ver === "graficos" ? "linhas" : ver && ehVisao(ver) ? ver : "tabela"}
+          titulo="Abate mensal por estado"
+          descricao={
+            <p>
+              O dado cru por trás de tudo acima, estado por estado e sexo por sexo, incluindo os
+              meses que ainda não passaram no teste de completude do consolidado.
+            </p>
           }
           tabela={<TabelaMensal serie={serie} />}
         />
