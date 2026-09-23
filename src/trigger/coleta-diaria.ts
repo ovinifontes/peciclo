@@ -1,6 +1,5 @@
 import { batch, logger, schedules } from "@trigger.dev/sdk";
 import { coletorMs } from "./coletor-ms.js";
-import { coletorMt } from "./coletor-mt.js";
 import { coletorRo } from "./coletor-ro.js";
 import { coletorPa } from "./coletor-pa.js";
 import { gerarEEnviar } from "./gerar-e-enviar.js";
@@ -32,16 +31,21 @@ export const coletaDiaria = schedules.task({
 
     // batch.triggerByTaskAndWait roda em paralelo e espera todos; um filho que
     // falha não derruba o pai, então a planilha sai com o que temos.
-    // MS e PA dão detalhe por GTA (janela do dia / arquivo do mês); MT e RO são
-    // agregados por competência (o INDEA e o Power BI já vêm somados por mês).
+    // MS e PA dão detalhe por GTA (janela do dia / arquivo do mês); o RO é
+    // agregado por competência (o Power BI já vem somado por mês).
+    //
+    // O MT saiu daqui em 23/09/2026. O `coletor-mt` consulta o InfoSindesa, que
+    // parou de receber guia nova em 07/08 e responde VAZIO desde então: rodá-lo
+    // todo dia só produzia o alerta "dado CONGELADO" às 6h, todo dia, sobre uma
+    // fonte que não vai voltar. O diário do MT agora vem de `coleta-semanal-mt`
+    // (SINDESA 2, sábado) e o mensal continua vindo do IMEA.
     const { runs } = await batch.triggerByTaskAndWait([
       { task: coletorMs, payload: { janela } },
-      { task: coletorMt, payload: { ano, mes, ateIso: dataLocal } },
       { task: coletorRo, payload: { ano, mes } },
       { task: coletorPa, payload: { ano } },
     ]);
 
-    const ufs = ["MS", "MT", "RO", "PA"] as const;
+    const ufs = ["MS", "RO", "PA"] as const;
     const falhas: Array<{ uf: string; erro: string }> = [];
 
     runs.forEach((r, i) => {

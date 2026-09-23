@@ -194,21 +194,22 @@ export interface SessaoSindesa2 {
 
 /** Abre o browser, autentica e devolve a sessão para reaproveitar em todos os dias. */
 export async function abrirSessaoSindesa2(cpf: string, senha: string): Promise<SessaoSindesa2> {
-  const ctx = await chromium.launchPersistentContext("", {
-    headless: true,
-    viewport: { width: 1600, height: 1000 },
-  });
-  const page = ctx.pages()[0] ?? (await ctx.newPage());
+  // `launch()` + `newContext()`, não `launchPersistentContext`: é o mesmo
+  // caminho que o robô das imagens diárias já usa em produção, e perfil
+  // persistente em container é fonte de dor sem nenhum ganho aqui.
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await ctx.newPage();
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle", timeout: 90_000 });
   await page.fill("#login", cpf);
   await page.fill("#senha", senha);
   await page.click("#btnSubmit");
   await page.waitForLoadState("networkidle", { timeout: 90_000 });
   if (page.url().includes("/login")) {
-    await ctx.close();
+    await browser.close();
     throw new SessaoSindesa2Error(`SINDESA 2 recusou a credencial (parou em ${page.url()})`);
   }
-  return { ctx, page, fechar: () => ctx.close() };
+  return { ctx, page, fechar: () => browser.close() };
 }
 
 /**

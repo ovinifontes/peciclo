@@ -17,12 +17,21 @@ Documentos de referência:
 |---|---|---|---|
 | **MS** | IAGRO (endpoint anônimo) | detalhe por GTA | 1 GET → XLSX → `gta_registros` → rollup |
 | **PA** | ADEPARA (Google Drive) | planilha mensal | detecta arquivo novo → `gta_registros` → rollup |
-| **MT** | INDEA (GTA Condensado, login) | agregado mensal | login + export → soma → `abate_mensal` |
+| **MT** | SINDESA 2 (INDEA, login) | detalhe por GTA | sábado: lista o dia → abre cada GTA → soma → `abate_diario` |
+| **MT** (mensal) | IMEA (PDF público) | agregado mensal | segunda: PDF → `abate_mensal` |
 | **RO** | IDARON (Power BI) | agregado mensal | query DSR → `abate_mensal` *(ver pendência)* |
 
-MS e PA dão detalhe por GTA e passam pela tabela `gta_registros`; MT e RO já vêm
-agregados por competência e gravam direto em `abate_mensal`. O gerador de
+MS e PA dão detalhe por GTA e passam pela tabela `gta_registros`; o RO já vem
+agregado por competência e grava direto em `abate_mensal`. O gerador de
 planilha lê só `abate_mensal`, então não sabe dessa diferença.
+
+**O MT é o caso torto.** O portal velho (InfoSindesa) parou de receber guia nova
+em 07/08/2026 e responde vazio desde então. O portal novo (SINDESA 2) tem o
+dado, mas não tem nenhum relatório somado por sexo: o número só existe dentro de
+cada GTA, na tabela "Estratificação". Por isso a coleta do MT é **semanal**, não
+diária — cada dia custa abrir ~800 guias, uma por uma. O mensal do MT não vem
+daí: vem do IMEA, que publica em PDF os números do próprio INDEA com ~2 semanas
+de atraso.
 
 ## Rodar os testes
 
@@ -83,7 +92,7 @@ listagem por dia.
    ```bash
    npx tsx -e "import('./src/semente/importar-historico.js').then(m => m.semearHistorico('referencias/planilha-abate-2025-2026.csv')).then(n => console.log('linhas:', n))"
    ```
-3. **Finalizar o RO** — o cluster do Power BI (`*.analysis.windows.net`) é bloqueado na
+3. ~~**Finalizar o RO**~~ — o cluster do Power BI (`*.analysis.windows.net`) é bloqueado na
    rede de desenvolvimento. Num ambiente com acesso, rode `npx tsx
    scripts/descobrir-consulta-ro.ts`, cole o corpo capturado em `montarConsulta`
    (em `src/coletores/ro.ts`), valide `parsearRespostaPowerBi` contra a resposta
