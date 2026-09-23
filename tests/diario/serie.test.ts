@@ -227,14 +227,25 @@ describe("indicadoresDiarios", () => {
 });
 
 describe("ufsComDado", () => {
-  it("devolve as UFs presentes na ordem canônica MT, MS, RO, PA, sem repetir", () => {
+  it("não lista UF escondida, mesmo que linhas dela cheguem", () => {
+    // Segunda barreira: a leitura do banco já filtra por UFS_VISIVEIS, mas se
+    // uma linha escapar (rollup antigo, script manual, teste), ela ainda assim
+    // não vira chip clicável nem coluna — a ordem canônica não a contém.
     const dias = agruparDias([
-      ...dia("PA", "2026-08-10", 1, 1),
+      ...dia("PA", "2026-08-10", 10, 10),
+      ...dia("MT", "2026-08-10", 1, 1),
+    ]);
+    expect(ufsComDado(dias)).toEqual(["MT"]);
+  });
+
+  it("devolve as UFs presentes na ordem canônica MT, MS, RO, sem repetir", () => {
+    const dias = agruparDias([
+      ...dia("RO", "2026-08-10", 1, 1),
       ...dia("MS", "2026-08-10", 1, 1),
       ...dia("MS", "2026-08-11", 1, 1),
       ...dia("MT", "2026-08-11", 1, 1),
     ]);
-    expect(ufsComDado(dias)).toEqual(["MT", "MS", "PA"]);
+    expect(ufsComDado(dias)).toEqual(["MT", "MS", "RO"]);
   });
 
   it("lista vazia devolve vazio", () => {

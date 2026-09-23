@@ -1,9 +1,14 @@
+import { UFS_VISIVEIS } from "@/lib/dados";
 import type { LinhaMensal } from "@/lib/dados";
 
 export type UF = LinhaMensal["uf"];
 
-/** Ordem fixa de exibição — a mesma da tabela e a mesma da atribuição de cor. */
-export const UFS_GRAFICO = ["MT", "MS", "RO", "PA"] as const satisfies readonly UF[];
+/**
+ * Ordem fixa de exibição — a mesma da tabela e a mesma da atribuição de cor.
+ * Sai de `UFS_VISIVEIS` (src/tipos.ts): esconder um estado é editar aquela
+ * lista, e ele some de chip, linha, coluna e tabela de uma vez.
+ */
+export const UFS_GRAFICO: readonly UF[] = UFS_VISIVEIS;
 
 export const NOME_UF: Record<UF, string> = {
   MT: "Mato Grosso",

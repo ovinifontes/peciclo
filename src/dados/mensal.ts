@@ -1,4 +1,4 @@
-import type { AgregadoMensal, Janela, LinhaMensal, UF } from "../tipos.js";
+import { ufVisivel, type AgregadoMensal, type Janela, type LinhaMensal, type UF } from "../tipos.js";
 import { obterCliente } from "./cliente.js";
 import { lerTudo } from "./paginar.js";
 
@@ -149,11 +149,19 @@ export async function gravarAgregados(
 // já importava daqui.
 export type { LinhaMensal } from "../tipos.js";
 
-/** Lê o abate mensal que alimenta a planilha. Igualdade exata em ABATE. */
+/**
+ * Lê o abate mensal que alimenta a planilha. Igualdade exata em ABATE.
+ *
+ * Filtra pelas UFs VISÍVEIS (`UFS_VISIVEIS` em tipos.ts): estado escondido sai
+ * daqui e, com isso, some das colunas E do consolidado de uma vez só. Filtrar
+ * na leitura, e não em cada gerador, é o que garante que os dois lugares
+ * concordem — um estado visível na tabela mas ausente da soma seria pior que
+ * não ter escondido nada.
+ */
 export async function lerAbateMensal(): Promise<LinhaMensal[]> {
   // Paginado: sem isto o Supabase devolve no máximo 1000 linhas sem erro, e
   // como a ordem é crescente, seriam os meses RECENTES a sumir da planilha.
-  return lerTudo<LinhaMensal>(
+  const linhas = await lerTudo<LinhaMensal>(
     (de, ate) =>
       obterCliente()
         .from("peciclo_abate_mensal")
@@ -166,6 +174,7 @@ export async function lerAbateMensal(): Promise<LinhaMensal[]> {
         .range(de, ate) as never,
     "abate mensal",
   );
+  return linhas.filter((l) => ufVisivel(l.uf));
 }
 
 /**

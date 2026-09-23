@@ -1,16 +1,22 @@
 // De `tipos.js`, não de `dados/mensal.js`: este módulo é importado pelo site, e
 // `dados/mensal.js` arrasta o cliente do Supabase da raiz para a checagem de
 // tipos — dependência que não existe no build da Vercel.
-import type { LinhaMensal } from "../tipos.js";
-import type { UF } from "../tipos.js";
+import { UFS_VISIVEIS, type LinhaMensal, type UF } from "../tipos.js";
 
 /**
- * Estados que compõem o consolidado do ciclo. O Pará fica FORA de propósito:
- * a ADEPARA publica com ~2 meses de atraso, e incluí-lo faria a leitura
- * inteira esperar por ele — três meses de defasagem em vez de um.
- * O PA continua aparecendo na tabela e no gráfico por estado.
+ * Estados que compõem o consolidado do ciclo — exatamente os VISÍVEIS.
+ *
+ * Eram duas listas até 23/09/2026 e já discordavam: o PA estava fora daqui
+ * (a ADEPARA publica com meses de atraso e faria a leitura inteira esperar
+ * por ele) mas continuava nas tabelas e gráficos. Uma lista só impede que
+ * voltem a divergir.
  */
-export const PAINEL_CICLO: UF[] = ["MT", "MS", "RO"];
+/**
+ * O painel do ciclo é exatamente o conjunto VISÍVEL. Eram duas listas até
+ * 23/09/2026 e já discordavam: o PA estava fora daqui (atraso da ADEPARA) e
+ * dentro das tabelas. Uma lista só impede que voltem a divergir.
+ */
+export const PAINEL_CICLO: UF[] = [...UFS_VISIVEIS];
 
 /** Fora desta faixa (em pontos percentuais no ano), o movimento é direcional. */
 const LIMITE_DIRECIONAL_PP = 1;

@@ -1,14 +1,14 @@
+import { UFS_VISIVEIS } from "@/lib/dados";
 import type { LinhaMensal } from "@/lib/dados";
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 /**
- * Todos os quatro estados coletados, o Pará incluído. O PA fica fora do
- * consolidado do ciclo (a ADEPARA publica com ~2 meses de atraso e faria a
- * leitura inteira esperar por ele), mas o dado dele existe e é do cliente —
- * esconder da tabela seria esconder coleta feita.
+ * Os estados VISÍVEIS, na mesma lista que os gráficos e o consolidado usam.
+ * O PA saiu em 23/09/2026 enquanto a ADEPARA estiver sem publicar; o dado
+ * continua no banco e volta assim que "PA" voltar a `UFS_VISIVEIS`.
  */
-const UFS = ["MT", "MS", "RO", "PA"] as const;
+const UFS = UFS_VISIVEIS;
 
 const numero = new Intl.NumberFormat("pt-BR");
 

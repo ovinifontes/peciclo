@@ -43,9 +43,10 @@ import {
 // De `tipos`, não de `dados/mensal`: aquele módulo importa o cliente do
 // Supabase da RAIZ, que não é instalado no build da Vercel (só `web/` roda
 // npm install). `tipos.ts` não importa nada — é a fronteira segura.
+import { UFS_VISIVEIS, ufVisivel } from "../../../src/tipos";
 import type { LinhaDiaria, LinhaMensal } from "../../../src/tipos";
 
-export { agruparDias, diaSemana, PAINEL_CICLO, rotuloDia, serieComMm7, ufsComDado };
+export { agruparDias, diaSemana, PAINEL_CICLO, rotuloDia, serieComMm7, ufsComDado, UFS_VISIVEIS };
 export type { DiaUf, LeituraCiclo, LinhaDiaria, LinhaMensal, PontoCiclo, PontoDiario };
 
 export interface Preco {
@@ -73,7 +74,7 @@ export interface DadosPainel {
  */
 async function lerAbateMensal(): Promise<LinhaMensal[]> {
   const supabase = await createClient();
-  return lerTudo<LinhaMensal>(
+  const linhas = await lerTudo<LinhaMensal>(
     (de, ate) =>
       supabase
         .from("peciclo_abate_mensal")
@@ -86,6 +87,9 @@ async function lerAbateMensal(): Promise<LinhaMensal[]> {
         .range(de, ate),
     "abate mensal",
   );
+  // Estado escondido (`UFS_VISIVEIS` em src/tipos.ts) some do site inteiro
+  // aqui: gráficos, tabela e consolidado leem todos desta função.
+  return linhas.filter((l) => ufVisivel(l.uf));
 }
 
 /** "2026-08-18" no fuso de Brasília — o dia do CLIENTE, não o UTC da Vercel. */
@@ -116,7 +120,7 @@ export async function lerAbateDiario(): Promise<LinhaDiaria[]> {
   const supabase = await createClient();
   const hoje = hojeSaoPaulo();
   const corte = diasAntes(hoje, DIAS_LEITURA_DIARIA);
-  return lerTudo<LinhaDiaria>(
+  const linhas = await lerTudo<LinhaDiaria>(
     (de, ate) =>
       supabase
         .from("peciclo_abate_diario")
@@ -133,6 +137,7 @@ export async function lerAbateDiario(): Promise<LinhaDiaria[]> {
         .range(de, ate),
     "abate diário",
   );
+  return linhas.filter((l) => ufVisivel(l.uf));
 }
 
 /** Última cotação de uma série de preço, ou null se não houver nenhuma. */

@@ -1,4 +1,4 @@
-import type { LinhaDiaria, UF } from "../tipos.js";
+import { UFS_VISIVEIS, type LinhaDiaria, type UF } from "../tipos.js";
 
 // Lógica pura da série diária. Importa APENAS ../tipos.js: o site importa este
 // módulo direto (mesmo precedente do ciclo/leitura.ts), então qualquer outra
@@ -15,8 +15,8 @@ export const MINIMO_DIAS_MM7 = 7;
 /** A janela da média móvel é sempre de 7 dias CORRIDOS (calendário, não pontos). */
 const JANELA_MM7 = 7;
 
-/** Ordem canônica das UFs no projeto (a mesma do web/estados.ts). */
-const ORDEM_UF: readonly UF[] = ["MT", "MS", "RO", "PA"];
+/** Ordem canônica das UFs no projeto — a mesma lista de `UFS_VISIVEIS`. */
+const ORDEM_UF: readonly UF[] = UFS_VISIVEIS;
 
 /** Um dia de uma UF já agrupado: soma por sexo e derivados. */
 export interface DiaUf {
