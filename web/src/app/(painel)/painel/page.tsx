@@ -144,10 +144,9 @@ export default async function Painel({
         <p className="mt-3 text-xs leading-relaxed text-neutral-500">
           Consolidado de composição fixa: um mês só entra quando {estados} têm dado, e só vale se o
           volume estiver em pelo menos 90% do mesmo mês do ano anterior — por isso a competência
-          acima costuma ficar um mês atrás do calendário. O Pará fica fora deste número (a ADEPARA
-          publica com cerca de dois meses de atraso) e continua na tabela e no gráfico por estado.
-          Logo, este percentual <strong>não é igual</strong> ao da planilha, que soma quatro estados:
-          são recortes diferentes, os dois corretos.
+          acima costuma ficar um mês atrás do calendário. Este percentual{" "}
+          <strong>não é igual</strong> ao da planilha: lá todo mês publicado entra, aqui só os que
+          passam nesse teste. São recortes diferentes, os dois corretos.
         </p>
       </section>
 
@@ -193,7 +192,6 @@ export default async function Painel({
           {estados}, terminando na competência da leitura. Um mês só vira ponto quando os{" "}
           {PAINEL_CICLO.length} estados publicaram e o volume passou no teste de completude — um
           estado ausente ou um mês ainda em coleta desenharia um degrau que parece mercado e não é.
-          O Pará fica fora.
         </p>
 
         {pontos.length ? (
@@ -243,11 +241,11 @@ export default async function Painel({
                   Abate diário por estado
                 </p>
                 <p className="mt-1 text-sm text-neutral-600">
-                  Hoje o <strong>MS</strong> publica o abate por dia e o <strong>RO</strong>{" "}
-                  entra por estimativa: o painel da IDARON publica o mês acumulado, e o dia
-                  é a variação entre duas manhãs — guia registrada com atraso cai no dia em
-                  que apareceu. O MT entra automaticamente quando o INDEA voltar; o PA, com
-                  ~2 meses de atraso, segue na seção mensal, abaixo.
+                  O <strong>MS</strong> publica o abate por dia. O <strong>RO</strong> entra
+                  por estimativa: o painel da IDARON publica o mês acumulado, e o dia é a
+                  variação entre duas manhãs — guia registrada com atraso cai no dia em que
+                  apareceu. O <strong>MT</strong> é reconstruído guia a guia no portal do
+                  INDEA, somando a estratificação de cada GTA.
                 </p>
               </>
             }
@@ -277,8 +275,8 @@ export default async function Painel({
                 Abate mensal por estado
               </p>
               <p className="mt-1 text-sm text-neutral-600">
-                O dado cru por trás de tudo acima, estado por estado e sexo por sexo — aqui{" "}
-                <strong>com o Pará</strong>, que só fica fora do consolidado do ciclo.
+                O dado cru por trás de tudo acima, estado por estado e sexo por sexo, incluindo
+                os meses que ainda não passaram no teste de completude do consolidado.
               </p>
             </>
           }

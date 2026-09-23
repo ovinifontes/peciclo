@@ -100,9 +100,8 @@ export default function TabelaMensal({ serie }: { serie: LinhaMensal[] }) {
         {meses.length} meses coletados nos {UFS.length} estados: {UFS.join(", ")}. Cabeças abatidas
         com finalidade <strong>ABATE</strong> — abate sanitário e sacrifício ficam de fora, porque
         não são decisão do pecuarista. Um travessão (—) quer dizer que o estado ainda não publicou
-        aquele mês: o Pará costuma ficar dois meses atrás dos outros, e é por isso que ele aparece
-        aqui mas não entra no consolidado do ciclo lá em cima. O mês corrente aparece parcial, com
-        os dias já coletados.
+        aquele mês — cada órgão estadual tem o seu ritmo. O mês corrente aparece parcial, com os
+        dias já coletados.
       </p>
     </>
   );

@@ -1,3 +1,4 @@
+import { UFS_VISIVEIS } from "@/lib/ufs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
     template: "%s · Peciclo",
   },
   description:
-    "Leitura do ciclo pecuário a partir do abate oficial de MT, MS, RO e PA.",
+    `Leitura do ciclo pecuário a partir do abate oficial de ${UFS_VISIVEIS.join(", ")}.`,
   // Área fechada: não interessa a buscador, e não deve aparecer em busca.
   robots: { index: false, follow: false },
 };

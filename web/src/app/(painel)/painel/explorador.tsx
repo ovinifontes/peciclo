@@ -222,7 +222,7 @@ export default function Explorador({
     ufsAtivas.some((uf) => totalCelula(m.porUf[uf]) !== null),
   );
 
-  // 4 estados × 18+ meses em barras agrupadas seria ilegível: as Colunas
+  // Vários estados × 18+ meses em barras agrupadas seria ilegível: as Colunas
   // mostram só os últimos 12 meses fechados, com nota. As Linhas seguem inteiras.
   const mesesDoGrafico = ver === "colunas" ? mesesVisiveis.slice(-12) : mesesVisiveis;
   const colunasCortadas = ver === "colunas" && mesesVisiveis.length > mesesDoGrafico.length;
@@ -288,7 +288,7 @@ export default function Explorador({
   }
 
   // Legenda e KPIs do cartão de exportação. Nos gráficos, os estados
-  // filtrados; na tabela — que mostra sempre os quatro —, os quatro: um filtro
+  // filtrados; na tabela — que mostra sempre todos —, todos: um filtro
   // invisível herdado dos gráficos mentiria sobre o conteúdo da foto.
   const ufsTabela = [...UFS_GRAFICO];
   const cartao = exportando
@@ -528,8 +528,7 @@ function SecoesGrafico({
         Dois recortes de honestidade: o mês corrente ({mesLongo(mesCorrente)}) fica fora
         dos gráficos e dos indicadores — ainda está em coleta, e o parcial desenharia uma
         queda que não existe —, e cada estado aparece até o último mês que publicou: nas
-        Linhas a série termina ali; nas Colunas, mês sem dado fica sem barra (o PA
-        costuma ficar uns dois meses atrás dos demais). Os indicadores usam o último mês
+        Linhas a série termina ali; nas Colunas, mês sem dado fica sem barra. Os indicadores usam o último mês
         fechado por <strong>todos</strong> os estados selecionados, indicado nos cartões.
         O parcial do mês corrente está na Tabela.
       </p>
