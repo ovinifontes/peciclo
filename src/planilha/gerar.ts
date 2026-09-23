@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import type { LinhaMensal } from "../dados/mensal.js";
-import type { Sexo, UF } from "../tipos.js";
-import { calcularKpis, type Kpi } from "./kpis.js";
+import { UFS_VISIVEIS, ufVisivel, type UF } from "../tipos.js";
+import { calcularKpis, participacaoFemeas, type Kpi } from "./kpis.js";
 import { lerAbateMensal } from "../dados/mensal.js";
 
 /**
@@ -9,11 +9,21 @@ import { lerAbateMensal } from "../dados/mensal.js";
  * Goiás e São Paulo continuam presentes e vazios de propósito: não existe
  * fonte estadual pública equivalente, e mudar o formato agora atrapalharia.
  */
+const ROTULO_UF: Record<UF, string> = {
+  MT: "Mato Grosso",
+  MS: "Mato Grosso do Sul",
+  RO: "Rondonia",
+  PA: "Pará",
+};
+
+/**
+ * As colunas saem de `UFS_VISIVEIS`, não de uma lista fixa: esconder um estado
+ * é editar aquela única lista, e a coluna some daqui junto com o dado.
+ * Goiás e São Paulo continuam presentes e vazios de propósito — não existe
+ * fonte estadual pública equivalente, e mudar o formato agora atrapalharia.
+ */
 const ESTADOS: Array<{ rotulo: string; uf: UF | null }> = [
-  { rotulo: "Mato Grosso", uf: "MT" },
-  { rotulo: "Mato Grosso do Sul", uf: "MS" },
-  { rotulo: "Rondonia", uf: "RO" },
-  { rotulo: "Pará", uf: "PA" },
+  ...UFS_VISIVEIS.map((uf) => ({ rotulo: ROTULO_UF[uf], uf: uf as UF | null })),
   { rotulo: "Goias", uf: null },
   { rotulo: "São Paulo", uf: null },
 ];
@@ -23,19 +33,20 @@ const NOMES_MESES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-const SEXOS: Sexo[] = ["FEMEA", "MACHO"];
+/** Fêmea, Macho e % Fêmeas — cada estado ocupa três colunas. */
+const COLUNAS_POR_ESTADO = 3;
 
 export interface LinhaGrade {
   rotuloMes: string;
   ano: number;
   mes: number;
-  /** 12 posições: pares fêmea/macho na ordem de ESTADOS. */
+  /** 18 posições: trios fêmea/macho/% na ordem de ESTADOS. */
   valores: Array<number | null>;
 }
 
 export interface Grade {
   cabecalhoEstados: string[];
-  cabecalhoSexos: string[];
+  cabecalhoColunas: string[];
   linhas: LinhaGrade[];
 }
 
@@ -47,7 +58,11 @@ export interface Grade {
  */
 export function legendaPlanilha(dataReferencia: string, ufsComFalha: string[] = []): string {
   const base = `Abate bovino — atualizado em ${dataReferencia}`;
-  const nomes = ufsComFalha.map((uf) => ESTADOS.find((e) => e.uf === uf)?.rotulo ?? uf);
+  // Só avisa sobre estado que a planilha MOSTRA: dizer "Pará não atualizou"
+  // numa planilha sem coluna de Pará só gera pergunta.
+  const nomes = ufsComFalha
+    .filter((uf) => ufVisivel(uf) || !(uf in ROTULO_UF))
+    .map((uf) => ESTADOS.find((e) => e.uf === uf)?.rotulo ?? uf);
   if (nomes.length === 0) return base;
   if (nomes.length === 1) {
     return `${base}\n\n⚠️ ${nomes[0]} não atualizou hoje: os números desse estado são os da última atualização.`;
@@ -69,9 +84,14 @@ export function montarGradeDados(
     for (let mes = 1; mes <= 12; mes++) {
       const valores: Array<number | null> = [];
       for (const estado of ESTADOS) {
-        for (const sexo of SEXOS) {
-          valores.push(estado.uf ? indice.get(`${estado.uf}-${ano}-${mes}-${sexo}`) ?? null : null);
-        }
+        const femea = estado.uf ? indice.get(`${estado.uf}-${ano}-${mes}-FEMEA`) ?? null : null;
+        const macho = estado.uf ? indice.get(`${estado.uf}-${ano}-${mes}-MACHO`) ?? null : null;
+        // A porcentagem só sai com os DOIS sexos presentes. Com um lado
+        // ausente a conta daria 100% (ou 0%) e venderia um mês pela metade
+        // como se fosse leitura do ciclo — que é justamente o número que o
+        // fazendeiro olha para decidir.
+        const pct = femea === null || macho === null ? null : participacaoFemeas(femea, macho);
+        valores.push(femea, macho, pct);
       }
       linhas.push({ rotuloMes: NOMES_MESES[mes - 1]!, ano, mes, valores });
     }
@@ -79,7 +99,7 @@ export function montarGradeDados(
 
   return {
     cabecalhoEstados: ESTADOS.map((e) => e.rotulo),
-    cabecalhoSexos: ESTADOS.flatMap(() => ["Fêmea", "Macho"]),
+    cabecalhoColunas: ESTADOS.flatMap(() => ["Fêmea", "Macho", "% Fêmeas"]),
     linhas,
   };
 }
@@ -89,28 +109,32 @@ export function escreverAbaDados(planilha: ExcelJS.Workbook, grade: Grade): void
   const aba = planilha.addWorksheet("Abate");
 
   const linhaEstados: Array<string | null> = [null, null];
-  for (const rotulo of grade.cabecalhoEstados) linhaEstados.push(rotulo, null);
+  for (const rotulo of grade.cabecalhoEstados) {
+    linhaEstados.push(rotulo, ...Array(COLUNAS_POR_ESTADO - 1).fill(null));
+  }
   aba.addRow(linhaEstados);
 
-  aba.addRow(["Mês", "Ano", ...grade.cabecalhoSexos]);
+  aba.addRow(["Mês", "Ano", ...grade.cabecalhoColunas]);
 
   for (const linha of grade.linhas) {
     aba.addRow([linha.rotuloMes, linha.ano, ...linha.valores]);
   }
 
-  // mescla o rótulo de cada estado sobre o par fêmea/macho
+  // mescla o rótulo de cada estado sobre o trio fêmea/macho/%
   grade.cabecalhoEstados.forEach((_, i) => {
-    const coluna = 3 + i * 2;
-    aba.mergeCells(1, coluna, 1, coluna + 1);
+    const coluna = 3 + i * COLUNAS_POR_ESTADO;
+    aba.mergeCells(1, coluna, 1, coluna + COLUNAS_POR_ESTADO - 1);
   });
 
   aba.getRow(1).font = { bold: true };
   aba.getRow(2).font = { bold: true };
   aba.getColumn(1).width = 12;
   aba.getColumn(2).width = 8;
-  for (let c = 3; c <= 14; c++) {
+  const ultimaColuna = 2 + grade.cabecalhoEstados.length * COLUNAS_POR_ESTADO;
+  for (let c = 3; c <= ultimaColuna; c++) {
     aba.getColumn(c).width = 12;
-    aba.getColumn(c).numFmt = "#,##0";
+    // A terceira coluna de cada estado é a porcentagem.
+    aba.getColumn(c).numFmt = (c - 3) % COLUNAS_POR_ESTADO === 2 ? "0.0%" : "#,##0";
   }
 }
 
@@ -149,10 +173,12 @@ export function escreverAbaCiclo(planilha: ExcelJS.Workbook, kpis: Kpi[]): void 
       k.variacaoMesAnteriorPp,
       k.variacaoAnoAnteriorPp,
       k.mediaMovel12m,
-      // No consolidado, menos de 4 estados significa que o mês não é
-      // comparável com os demais — a ausência de um estado desloca o
-      // percentual sem que o mercado tenha mudado.
-      k.uf === "CONSOLIDADO" ? `${k.estados} de 4` : "—",
+      // No consolidado, faltar estado significa que o mês não é comparável
+      // com os demais — a ausência de um desloca o percentual sem que o
+      // mercado tenha mudado. O total vem de UFS_VISIVEIS, não cravado em 4:
+      // com o PA escondido o denominador é 3, e "3 de 4" seria alarme falso
+      // todo mês.
+      k.uf === "CONSOLIDADO" ? `${k.estados} de ${UFS_VISIVEIS.length}` : "—",
     ]);
   }
 

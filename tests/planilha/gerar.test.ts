@@ -12,12 +12,14 @@ const dados: LinhaMensal[] = [
 ];
 
 describe("montarGradeDados", () => {
-  it("preserva a ordem de colunas da planilha original, com GO e SP vazios", () => {
+  it("mostra só os estados visíveis, com GO e SP vazios no fim", () => {
     const grade = montarGradeDados(dados, 2025, 2026);
+    // O PA está escondido desde 23/09/2026 (ver UFS_VISIVEIS em tipos.ts).
     expect(grade.cabecalhoEstados).toEqual([
-      "Mato Grosso", "Mato Grosso do Sul", "Rondonia", "Pará", "Goias", "São Paulo",
+      "Mato Grosso", "Mato Grosso do Sul", "Rondonia", "Goias", "São Paulo",
     ]);
-    expect(grade.cabecalhoSexos).toHaveLength(12);
+    expect(grade.cabecalhoColunas).toHaveLength(15);
+    expect(grade.cabecalhoColunas.slice(0, 3)).toEqual(["Fêmea", "Macho", "% Fêmeas"]);
   });
 
   it("posiciona cada valor na célula certa", () => {
@@ -26,9 +28,9 @@ describe("montarGradeDados", () => {
     expect(jan2025.rotuloMes).toBe("Janeiro");
     expect(jan2025.valores[0]).toBe(333650); // MT fêmea
     expect(jan2025.valores[1]).toBe(288211); // MT macho
-    expect(jan2025.valores[2]).toBe(185419); // MS fêmea
-    expect(jan2025.valores[3]).toBeNull();   // MS macho ausente
-    expect(jan2025.valores[8]).toBeNull();   // Goiás fêmea, sempre vazio
+    expect(jan2025.valores[3]).toBe(185419); // MS fêmea
+    expect(jan2025.valores[4]).toBeNull();   // MS macho ausente
+    expect(jan2025.valores[9]).toBeNull();   // Goiás fêmea, sempre vazio
   });
 
   it("gera todos os meses do intervalo, mesmo sem dados", () => {
@@ -38,11 +40,30 @@ describe("montarGradeDados", () => {
     expect(grade.linhas[23]!.ano).toBe(2026);
   });
 
-  it("coloca o valor do PA de maio/2026 na posição correta", () => {
+  it("estado escondido não ocupa coluna nenhuma", () => {
     const grade = montarGradeDados(dados, 2025, 2026);
+    expect(grade.cabecalhoEstados).not.toContain("Pará");
+    // Com MT, MS e RO visíveis, a 4ª posição já é Goiás — e Goiás é sempre
+    // vazio. Se o PA voltasse sem este teste ser revisto, ele apareceria aqui.
     const maio = grade.linhas.find((l) => l.ano === 2026 && l.mes === 5)!;
-    expect(maio.valores[6]).toBe(188406); // PA fêmea
-    expect(maio.valores[7]).toBe(152453); // PA macho
+    expect(maio.valores[9]).toBeNull();
+    expect(maio.valores[10]).toBeNull();
+  });
+
+  it("calcula a % de fêmeas de cada estado ao lado do par", () => {
+    const grade = montarGradeDados(dados, 2025, 2026);
+    const jan2025 = grade.linhas.find((l) => l.ano === 2025 && l.mes === 1)!;
+    expect(jan2025.valores[2]).toBeCloseTo(333650 / (333650 + 288211), 6); // MT
+  });
+
+  it("não inventa % quando falta um dos sexos", () => {
+    const grade = montarGradeDados(dados, 2025, 2026);
+    const jan2025 = grade.linhas.find((l) => l.ano === 2025 && l.mes === 1)!;
+    // MS tem fêmea e não tem macho: dividir daria 100% e venderia mês
+    // incompleto como leitura do ciclo.
+    expect(jan2025.valores[5]).toBeNull();
+    // Goiás não tem nada.
+    expect(jan2025.valores[11]).toBeNull();
   });
 });
 
@@ -62,9 +83,17 @@ describe("legendaPlanilha", () => {
     expect(legendaPlanilha("2026-08-24", ["MT", "RO"])).toContain(
       "Mato Grosso e Rondonia não atualizaram hoje",
     );
-    expect(legendaPlanilha("2026-08-24", ["MT", "RO", "PA"])).toContain(
-      "Mato Grosso, Rondonia e Pará não atualizaram hoje",
+    expect(legendaPlanilha("2026-08-24", ["MT", "RO", "MS"])).toContain(
+      "Mato Grosso, Rondonia e Mato Grosso do Sul não atualizaram hoje",
     );
+  });
+
+  it("não avisa sobre estado que a planilha nem mostra", () => {
+    // Dizer "Pará não atualizou" numa planilha sem coluna de Pará só gera
+    // pergunta para o cliente.
+    const legenda = legendaPlanilha("2026-08-24", ["MT", "PA"]);
+    expect(legenda).toContain("Mato Grosso não atualizou hoje");
+    expect(legenda).not.toContain("Pará");
   });
 
   it("UF desconhecida não quebra a legenda", () => {

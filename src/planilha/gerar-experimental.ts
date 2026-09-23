@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { lerAbateMensal, type LinhaMensal } from "../dados/mensal.js";
 import { lerAbateSif, lerPrecos, type LinhaPreco } from "../dados/experimental.js";
 import { calcularKpis } from "./kpis.js";
+import { UFS_VISIVEIS, type UF } from "../tipos.js";
 import { calcularPremioFuturos, calcularRelacaoTroca, ultimoPreco } from "./mercado.js";
 import type { Futuro } from "../coletores/precos.js";
 
@@ -15,11 +16,15 @@ const NOMES_MESES = [
  * GO e SP entram de fonte diferente (inspeção federal) e ficam rotulados,
  * porque o nível absoluto não é comparável — só a tendência.
  */
+const ROTULO_UF: Record<UF, string> = {
+  MT: "Mato Grosso",
+  MS: "Mato Grosso do Sul",
+  RO: "Rondonia",
+  PA: "Pará",
+};
+
 const ESTADOS: Array<{ rotulo: string; uf: string; fonte: "gta" | "sif" }> = [
-  { rotulo: "Mato Grosso", uf: "MT", fonte: "gta" },
-  { rotulo: "Mato Grosso do Sul", uf: "MS", fonte: "gta" },
-  { rotulo: "Rondonia", uf: "RO", fonte: "gta" },
-  { rotulo: "Pará", uf: "PA", fonte: "gta" },
+  ...UFS_VISIVEIS.map((uf) => ({ rotulo: ROTULO_UF[uf], uf: uf as string, fonte: "gta" as const })),
   { rotulo: "Goias (SIF)", uf: "GO", fonte: "sif" },
   { rotulo: "São Paulo (SIF)", uf: "SP", fonte: "sif" },
 ];
@@ -27,8 +32,8 @@ const ESTADOS: Array<{ rotulo: string; uf: string; fonte: "gta" | "sif" }> = [
 function abaAviso(planilha: ExcelJS.Workbook): void {
   const aba = planilha.addWorksheet("Leia-me");
   const linhas: Array<[string, string]> = [
-    ["O que é esta planilha", "Versão completa: os 4 estados da planilha tradicional mais Goiás, São Paulo, preços e futuros. Chega 30 min depois da tradicional, que continua sendo enviada sem alteração."],
-    ["MT, MS, RO, PA", "Idênticos à planilha tradicional. Fonte: GTA dos órgãos estaduais (INDEA, IAGRO, IDARON, ADEPARA) — intenção de abate registrada na origem."],
+    ["O que é esta planilha", `Versão completa: os ${UFS_VISIVEIS.length} estados da planilha tradicional mais Goiás, São Paulo, preços e futuros. Chega 30 min depois da tradicional, que continua sendo enviada sem alteração.`],
+    [UFS_VISIVEIS.join(", "), "Idênticos à planilha tradicional. Fonte: GTA dos órgãos estaduais (INDEA, IAGRO, IDARON, ADEPARA) — intenção de abate registrada na origem."],
     ["Goiás e São Paulo", "Fonte DIFERENTE: abate sob inspeção federal (SIGSIF/MAPA). Não cobre inspeção estadual e municipal, então o NÚMERO ABSOLUTO é menor e NÃO é comparável com os outros quatro estados. Use apenas a TENDÊNCIA do % de fêmeas."],
     ["Por que não dá para igualar", "GO e SP não publicam abate bovino por sexo nas próprias fontes de GTA. O SIGSIF é a única fonte pública com essa quebra."],
     ["Preços", "Indicador do Boi Gordo CEPEA/B3 (R$/@) e Indicador do Bezerro CEPEA/ESALQ-MS (R$/cabeça). Fonte: CEPEA-ESALQ/USP."],
@@ -44,15 +49,23 @@ function abaAviso(planilha: ExcelJS.Workbook): void {
   aba.getColumn(2).alignment = { wrapText: true, vertical: "top" };
 }
 
-function abaAbate(
+/** Exportada para teste: a ordem das linhas é o que se quer verificar. */
+export function abaAbate(
   planilha: ExcelJS.Workbook,
   gta: LinhaMensal[],
   sif: Array<{ uf: string; ano: number; mes: number; sexo: string; quantidade: number }>,
 ): void {
   const aba = planilha.addWorksheet("Abate");
-  const indice = new Map<string, number>();
-  for (const d of gta) indice.set(`${d.uf}-${d.ano}-${d.mes}-${d.sexo}`, d.quantidade);
-  for (const d of sif) indice.set(`${d.uf}-${d.ano}-${d.mes}-${d.sexo}`, d.quantidade);
+
+  // Um índice POR FONTE, e cada estado lê o seu. Num índice só, a segunda
+  // carga sobrescrevia a primeira na mesma chave — e como o SIGSIF também
+  // coleta MT, a coluna "Mato Grosso" (declarada `fonte: "gta"` logo acima)
+  // vinha com número de inspeção federal, menor. Resultado: as duas planilhas
+  // do dia mostravam MT diferente, com 30 min de diferença, contrariando o
+  // próprio Leia-me, que promete MT/MS/RO/PA idênticos à tradicional.
+  const porFonte = { gta: new Map<string, number>(), sif: new Map<string, number>() };
+  for (const d of gta) porFonte.gta.set(`${d.uf}-${d.ano}-${d.mes}-${d.sexo}`, d.quantidade);
+  for (const d of sif) porFonte.sif.set(`${d.uf}-${d.ano}-${d.mes}-${d.sexo}`, d.quantidade);
 
   const anos = [...gta.map((d) => d.ano), ...sif.map((d) => d.ano)];
   const anoInicial = anos.length ? Math.min(...anos) : new Date().getUTCFullYear();
@@ -63,11 +76,27 @@ function abaAbate(
   aba.addRow(cabecalho);
   aba.addRow(["Mês", "Ano", ...ESTADOS.flatMap(() => ["Fêmea", "Macho"])]);
 
-  for (let ano = anoInicial; ano <= anoFinal; ano++) {
-    for (let mes = 1; mes <= 12; mes++) {
+  // Mês corrente no fuso de quem lê, não em UTC: às 21h do dia 31 o UTC já
+  // virou o mês e a planilha abriria com uma linha futura vazia no topo.
+  const [anoHoje, mesHoje] = new Date()
+    .toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" })
+    .split("-")
+    .map(Number) as [number, number];
+
+  // Do mês mais recente para o mais antigo: quem abre a planilha quer o mês
+  // que acabou de fechar, não janeiro de 2000. Mesma ordem da aba Ciclo, que
+  // já vinha decrescente — as duas abas agora se leem do mesmo jeito.
+  //
+  // Meses FUTUROS ficam de fora. Enquanto a ordem era crescente eles caíam no
+  // fim e ninguém via; invertida, seriam as primeiras linhas da planilha —
+  // o cliente abriria em outubro, novembro e dezembro vazios, que é
+  // precisamente o contrário de pôr o mais recente no topo.
+  for (let ano = anoFinal; ano >= anoInicial; ano--) {
+    for (let mes = 12; mes >= 1; mes--) {
+      if (ano > anoHoje || (ano === anoHoje && mes > mesHoje)) continue;
       const valores = ESTADOS.flatMap((e) => [
-        indice.get(`${e.uf}-${ano}-${mes}-FEMEA`) ?? null,
-        indice.get(`${e.uf}-${ano}-${mes}-MACHO`) ?? null,
+        porFonte[e.fonte].get(`${e.uf}-${ano}-${mes}-FEMEA`) ?? null,
+        porFonte[e.fonte].get(`${e.uf}-${ano}-${mes}-MACHO`) ?? null,
       ]);
       aba.addRow([NOMES_MESES[mes - 1]!, ano, ...valores]);
     }
