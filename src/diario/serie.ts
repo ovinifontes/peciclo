@@ -1,4 +1,10 @@
-import { UFS_VISIVEIS, type LinhaDiaria, type UF } from "../tipos.js";
+// SEM a extensão `.js`, ao contrário do resto do projeto, e de propósito:
+// este módulo é empacotado pelo Next (o painel importa a série diária daqui).
+// O `tsc` da raiz resolve os dois jeitos (moduleResolution: "Bundler"), mas o
+// empacotador do site procura um `tipos.js` que não existe em disco e o build
+// da Vercel quebra. Enquanto era só `import type` passava batido — tipo some
+// na compilação e ninguém precisa resolver o caminho.
+import { UFS_VISIVEIS, type LinhaDiaria, type UF } from "../tipos";
 
 // Lógica pura da série diária. Importa APENAS ../tipos.js: o site importa este
 // módulo direto (mesmo precedente do ciclo/leitura.ts), então qualquer outra

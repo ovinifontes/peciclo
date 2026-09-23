@@ -1,4 +1,4 @@
-import { UFS_VISIVEIS } from "@/lib/dados";
+import { UFS_VISIVEIS } from "@/lib/ufs";
 import type { LinhaMensal } from "@/lib/dados";
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];

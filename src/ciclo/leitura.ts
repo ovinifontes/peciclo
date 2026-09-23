@@ -1,7 +1,9 @@
 // De `tipos.js`, não de `dados/mensal.js`: este módulo é importado pelo site, e
 // `dados/mensal.js` arrasta o cliente do Supabase da raiz para a checagem de
 // tipos — dependência que não existe no build da Vercel.
-import { UFS_VISIVEIS, type LinhaMensal, type UF } from "../tipos.js";
+// Sem `.js` pelo mesmo motivo de `diario/serie.ts`: o Next empacota este
+// módulo e não resolve a extensão que não existe em disco.
+import { UFS_VISIVEIS, type LinhaMensal, type UF } from "../tipos";
 
 /**
  * Estados que compõem o consolidado do ciclo — exatamente os VISÍVEIS.

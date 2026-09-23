@@ -43,10 +43,10 @@ import {
 // De `tipos`, não de `dados/mensal`: aquele módulo importa o cliente do
 // Supabase da RAIZ, que não é instalado no build da Vercel (só `web/` roda
 // npm install). `tipos.ts` não importa nada — é a fronteira segura.
-import { UFS_VISIVEIS, ufVisivel } from "../../../src/tipos";
+import { ufVisivel } from "../../../src/tipos";
 import type { LinhaDiaria, LinhaMensal } from "../../../src/tipos";
 
-export { agruparDias, diaSemana, PAINEL_CICLO, rotuloDia, serieComMm7, ufsComDado, UFS_VISIVEIS };
+export { agruparDias, diaSemana, PAINEL_CICLO, rotuloDia, serieComMm7, ufsComDado };
 export type { DiaUf, LeituraCiclo, LinhaDiaria, LinhaMensal, PontoCiclo, PontoDiario };
 
 export interface Preco {
