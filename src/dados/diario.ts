@@ -27,15 +27,17 @@ export async function rollupDiario(args: {
 
 /**
  * Grava dias que já vêm prontos da fonte: MT com 'gta_condensada_dia' (o INDEA
- * consultado com janela de 1 dia, o default) e RO com 'powerbi_diff' (o dia
- * estimado pela diferença de retratos do painel). Sobrescreve por (uf, dia,
- * finalidade, sexo) — e como o rollup diário só sobrescreve linha
- * 'gta_agregada' (dele mesmo), estas linhas ficam protegidas por construção.
+ * velho consultado com janela de 1 dia, o default), MT com 'sindesa2_gta' (o
+ * portal novo, somando a Estratificação GTA a GTA — a única saída depois que o
+ * velho parou em 07/08/2026) e RO com 'powerbi_diff' (o dia estimado pela
+ * diferença de retratos do painel). Sobrescreve por (uf, dia, finalidade,
+ * sexo) — e como o rollup diário só sobrescreve linha 'gta_agregada' (dele
+ * mesmo), estas linhas ficam protegidas por construção.
  */
 export async function gravarAgregadosDiarios(
   agregados: AgregadoDiario[],
   coletaId: number,
-  fonte: "gta_condensada_dia" | "powerbi_diff" = "gta_condensada_dia",
+  fonte: "gta_condensada_dia" | "powerbi_diff" | "sindesa2_gta" = "gta_condensada_dia",
 ): Promise<void> {
   if (agregados.length === 0) return;
   const { error } = await obterCliente()
