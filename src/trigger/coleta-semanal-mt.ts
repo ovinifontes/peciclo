@@ -1,6 +1,8 @@
 import { batch, logger, schedules } from "@trigger.dev/sdk";
 import { coletorMtDia } from "./coletor-mt-dia.js";
 import { obterCliente } from "../dados/cliente.js";
+import { abrirColeta, fecharColeta } from "../dados/coletas.js";
+import { consolidarMesDoDiario } from "../dados/mensal.js";
 import { alertarOperador } from "../notificacao/alertas.js";
 
 /** Primeiro dia que só existe no SINDESA 2 — antes disso era o portal velho. */
@@ -125,12 +127,19 @@ export const coletaSemanalMt = schedules.task({
         );
       }
 
+      // Fecha o mês ANTERIOR a partir do diário, se ele estiver inteiro.
+      // Roda aqui, e não num agendamento próprio, porque o único momento em
+      // que o mês pode ter ficado completo é logo depois de uma coleta.
+      // Mês furado é recusado pela própria função — agosto/2026 tem 4 dias que
+      // o portal não devolve, e o número do IMEA continua valendo para ele.
+      const mensal = await consolidarMensalAnterior(hoje);
       logger.info("coleta semanal do MT concluída", {
         disparados: pendentes.length,
         falhas: falhas.length,
         cabecas,
+        mensal,
       });
-      return { hoje, disparados: pendentes.length, falhas, cabecas };
+      return { hoje, disparados: pendentes.length, falhas, cabecas, mensal };
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
       logger.error("coleta semanal do MT falhou", { erro: mensagem });
@@ -145,3 +154,41 @@ export const coletaSemanalMt = schedules.task({
     }
   },
 });
+
+/**
+ * Tenta fechar o mensal do mês anterior a partir do diário.
+ *
+ * Nunca lança: o mensal é um bônus da coleta semanal, não a razão dela. Se
+ * falhar, os dias já estão gravados e o IMEA continua cobrindo o mês.
+ */
+async function consolidarMensalAnterior(
+  hojeIso: string,
+): Promise<{ competencia: string; gravou: boolean; motivo?: string; total?: number }> {
+  const [ano, mes] = hojeIso.split("-").map(Number) as [number, number];
+  const anterior = new Date(Date.UTC(ano, mes - 2, 1));
+  const competencia = `${anterior.getUTCFullYear()}-${String(anterior.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  try {
+    const coletaId = await abrirColeta({
+      uf: "MT",
+      tipo: "mensal",
+      janela: { inicio: `${competencia}-01`, fim: `${competencia}-28` },
+    });
+    const r = await consolidarMesDoDiario({
+      uf: "MT",
+      ano: anterior.getUTCFullYear(),
+      mes: anterior.getUTCMonth() + 1,
+      coletaId,
+    });
+    await fecharColeta({
+      id: coletaId,
+      status: r.gravou ? "ok" : "sem_dados",
+      erro: r.motivo ?? null,
+    });
+    return { competencia, ...r };
+  } catch (erro) {
+    const motivo = erro instanceof Error ? erro.message : String(erro);
+    logger.warn("consolidação do mensal de MT falhou; os dias estão gravados", { motivo });
+    return { competencia, gravou: false, motivo };
+  }
+}

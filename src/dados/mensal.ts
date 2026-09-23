@@ -74,9 +74,9 @@ const universoDe = (a: { uf: string; ano: number; mes: number; finalidade: strin
 export async function gravarAgregados(
   agregados: AgregadoMensal[],
   coletaId: number,
-  fonte: "powerbi" | "gta_condensada",
-): Promise<void> {
-  if (agregados.length === 0) return;
+  fonte: "powerbi" | "gta_condensada" | "sindesa2_gta" | "gta_agregada",
+): Promise<number> {
+  if (agregados.length === 0) return 0;
   const cliente = obterCliente();
 
   // Um filtro só, cartesiano de propósito (uf × ano × mes): traz no máximo
@@ -123,7 +123,7 @@ export async function gravarAgregados(
       );
     }
   }
-  if (aGravar.length === 0) return;
+  if (aGravar.length === 0) return 0;
 
   const { error } = await cliente
     .from("peciclo_abate_mensal")
@@ -142,6 +142,7 @@ export async function gravarAgregados(
       { onConflict: "uf,ano,mes,finalidade,sexo" },
     );
   if (error) throw new Error(`Falha ao gravar agregados: ${error.message}`);
+  return aGravar.length;
 }
 
 // Declarado em `tipos.ts` (que não importa nada) para o site poder usá-lo sem
@@ -211,4 +212,106 @@ export async function congeladoDesde(args: {
   const desde = String((data as { atualizado_em: string }).atualizado_em);
   const dias = Math.floor((Date.now() - new Date(desde).getTime()) / 86_400_000);
   return { desde: desde.slice(0, 10), dias };
+}
+
+/** Todos os dias do mês em ISO — a régua contra a qual se mede o que falta. */
+export function diasDoMes(ano: number, mes: number): string[] {
+  // `Date.UTC(ano, mes, 0)` devolve o último dia do mês `mes` (mês seguinte,
+  // dia zero). Resolve fevereiro bissexto sem tabela nem `if`.
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const mm = String(mes).padStart(2, "0");
+  return Array.from(
+    { length: ultimo },
+    (_, i) => `${ano}-${mm}-${String(i + 1).padStart(2, "0")}`,
+  );
+}
+
+/** Dias do mês presentes no diário, e quais faltam. */
+export async function diasDoMesNoDiario(
+  uf: UF,
+  ano: number,
+  mes: number,
+): Promise<{ presentes: Set<string>; faltam: string[] }> {
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const mm = String(mes).padStart(2, "0");
+  const { data, error } = await obterCliente()
+    .from("peciclo_abate_diario")
+    .select("data")
+    .eq("uf", uf)
+    .eq("finalidade", "ABATE")
+    .gte("data", `${ano}-${mm}-01`)
+    .lte("data", `${ano}-${mm}-${String(ultimo).padStart(2, "0")}`);
+  if (error) throw new Error(`Falha ao ler o diário de ${uf} ${ano}-${mm}: ${error.message}`);
+
+  const presentes = new Set((data ?? []).map((l) => String(l.data)));
+  return { presentes, faltam: diasDoMes(ano, mes).filter((d) => !presentes.has(d)) };
+}
+
+/**
+ * Fecha o mensal a partir do DIÁRIO — só quando o mês está INTEIRO.
+ *
+ * Por que existe: o mensal de MT vinha só do IMEA, que publica com ~2 semanas
+ * de atraso. Tendo o diário completo, setembro pode fechar no dia 1º de
+ * outubro em vez de meados do mês — e o IMEA deixa de ser a fonte para virar
+ * conferência, que é um papel melhor para ele.
+ *
+ * A trava de completude é o ponto inteiro desta função. Um mês com dias
+ * faltando somaria MENOS do que foi e entraria como queda de mercado; e como
+ * a série mensal alimenta a leitura do ciclo, a queda inventada viraria uma
+ * fase de ciclo inventada. Mês furado não é gravado, e o número que já estava
+ * lá (IMEA) permanece — que é exatamente o desejado para agosto/2026, que tem
+ * 4 dias que o portal se recusa a devolver.
+ *
+ * A precedência de `gravarAgregados` continua valendo por cima disto: entre
+ * duas contagens do mesmo mês, a MAIOR vence. Então esta função nunca rebaixa
+ * um número do IMEA — no máximo o confirma ou o supera.
+ */
+export async function consolidarMesDoDiario(args: {
+  uf: UF;
+  ano: number;
+  mes: number;
+  coletaId: number;
+}): Promise<{ gravou: boolean; motivo?: string; total?: number }> {
+  const { faltam } = await diasDoMesNoDiario(args.uf, args.ano, args.mes);
+  if (faltam.length > 0) {
+    return {
+      gravou: false,
+      motivo: `mês incompleto: faltam ${faltam.length} dia(s) (${faltam.slice(0, 5).join(", ")}${faltam.length > 5 ? "…" : ""})`,
+    };
+  }
+
+  const mm = String(args.mes).padStart(2, "0");
+  const ultimo = new Date(Date.UTC(args.ano, args.mes, 0)).getUTCDate();
+  const { data, error } = await obterCliente()
+    .from("peciclo_abate_diario")
+    .select("sexo, quantidade")
+    .eq("uf", args.uf)
+    .eq("finalidade", "ABATE")
+    .gte("data", `${args.ano}-${mm}-01`)
+    .lte("data", `${args.ano}-${mm}-${String(ultimo).padStart(2, "0")}`);
+  if (error) throw new Error(`Falha ao somar o diário: ${error.message}`);
+
+  const porSexo = new Map<string, number>();
+  for (const l of data ?? []) {
+    porSexo.set(String(l.sexo), (porSexo.get(String(l.sexo)) ?? 0) + Number(l.quantidade));
+  }
+  if (porSexo.size === 0) return { gravou: false, motivo: "mês sem linha nenhuma no diário" };
+
+  const agregados: AgregadoMensal[] = [...porSexo].map(([sexo, quantidade]) => ({
+    uf: args.uf,
+    ano: args.ano,
+    mes: args.mes,
+    finalidade: "ABATE",
+    sexo: sexo as AgregadoMensal["sexo"],
+    quantidade,
+  }));
+  const total = agregados.reduce((s, a) => s + a.quantidade, 0);
+  const escritas = await gravarAgregados(agregados, args.coletaId, "sindesa2_gta");
+  // Zero escritas não é falha: ou o número já era idêntico, ou a precedência
+  // recusou rebaixar um total do IMEA. Dizer "gravou" nesse caso seria mentir
+  // no log de quem for investigar um mês depois.
+  if (escritas === 0) {
+    return { gravou: false, motivo: "nada a mudar (valor idêntico ou o IMEA tem número maior)", total };
+  }
+  return { gravou: true, total };
 }
