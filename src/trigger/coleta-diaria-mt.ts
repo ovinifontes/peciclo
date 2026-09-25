@@ -7,8 +7,16 @@ import { alertarOperador } from "../notificacao/alertas.js";
 
 /** Primeiro dia que só existe no SINDESA 2 — antes disso era o portal velho. */
 const PRIMEIRO_DIA_DO_NOVO = "2026-08-07";
-/** Quantos dias para trás a semana olha. */
-const JANELA_DIAS = 10;
+/**
+ * Quantos dias para trás a corrida olha.
+ *
+ * Com corrida DIÁRIA a janela não precisa cobrir uma semana inteira — o dia
+ * novo entra no dia seguinte. Ela existe para CICATRIZAR: se um dia falhar, ou
+ * o portal cair numa madrugada, os dias seguintes recolhem o que ficou sem
+ * ninguém precisar olhar. Dia já gravado é pulado sem tocar no portal, então
+ * uma janela folgada não custa requisição nenhuma.
+ */
+const JANELA_DIAS = 7;
 /**
  * Quantos dos dias mais recentes são recoletados MESMO já estando no banco.
  *
@@ -50,30 +58,32 @@ async function jaNoBanco(de: string, ate: string): Promise<Set<string>> {
 }
 
 /**
- * Coleta semanal do diário de MT — sábado de manhã.
+ * Coleta do diário de MT — todo dia, 5h da manhã.
  *
- * Semanal, e não diária, porque cada dia custa abrir ~800 GTAs no SINDESA 2:
- * o portal não tem relatório somado por sexo, e o número só existe dentro de
- * cada guia. Uma vez por semana, com os dias em fila de um em um, é o ritmo
- * que o portal aguenta sem que o acesso vire incômodo para o INDEA.
+ * Cada dia custa abrir ~800 GTAs no SINDESA 2, uma por uma: o portal não tem
+ * relatório somado por sexo, e o número só existe dentro de cada guia. Rodando
+ * todo dia, a conta típica é o dia novo mais os dois anteriores recoletados —
+ * três dias, ~15 min, em fila de um em um.
  *
- * Sábado de propósito: pega a semana inteira já fechada e roda quando o portal
- * está vazio. Um dia que falhar não se perde — o sábado seguinte olha 10 dias
- * para trás e recolhe o que ficou.
+ * 5h de propósito: o portal está vazio e a coleta termina antes das 6h, que é
+ * quando a planilha do cliente é gerada.
+ *
+ * Dia que falhar não se perde: a janela olha 7 dias para trás e pula o que já
+ * está no banco, então a corrida do dia seguinte cicatriza sozinha.
  *
  * NUNCA lança para o agendador: falha vira alerta ao operador. O fazendeiro
  * não vê nada disto.
  */
-export const coletaSemanalMt = schedules.task({
-  id: "coleta-semanal-mt",
+export const coletaDiariaMt = schedules.task({
+  id: "coleta-diaria-mt",
   cron: {
-    pattern: "0 5 * * 6", // sábado, 05:00 de Brasília
+    pattern: "0 5 * * *", // todo dia, 05:00 de Brasília
     timezone: "America/Sao_Paulo",
     environments: ["PRODUCTION"],
   },
   machine: "small-1x",
-  // Só orquestra: o trabalho pesado está nos filhos. O teto cobre a espera
-  // dos 10 dias em fila (~5 min cada) com folga para um retry.
+  // Só orquestra: o trabalho pesado está nos filhos. O teto cobre o pior caso
+  // — a janela inteira em fila, ~5 min cada — e não o caso típico de três.
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
   run: async (payload) => {
@@ -119,21 +129,23 @@ export const coletaSemanalMt = schedules.task({
         // toda semana com dias diferentes precisa alertar toda semana, mas o
         // mesmo problema repetido não deve virar ruído diário.
         await alertarOperador(
-          `MT semanal: ${falhas.length} de ${pendentes.length} dias falharam`,
+          `MT: ${falhas.length} de ${pendentes.length} dias falharam`,
           falhas.join("\n") +
-            "\n\nOs dias que faltaram entram sozinhos no sábado seguinte — a janela " +
+            "\n\nOs dias que faltaram entram sozinhos na corrida de amanhã — a janela " +
             `olha ${JANELA_DIAS} dias para trás e pula o que já está no banco.`,
-          { chave: `mt-semanal-falhou:${falhas.length}` },
+          { chave: `mt-diaria-falhou:${falhas.length}` },
         );
       }
 
       // Fecha o mês ANTERIOR a partir do diário, se ele estiver inteiro.
       // Roda aqui, e não num agendamento próprio, porque o único momento em
-      // que o mês pode ter ficado completo é logo depois de uma coleta.
+      // que o mês pode ter ficado completo é logo depois de uma coleta. Com a
+      // corrida diária, o mês fecha no primeiro dia do mês seguinte em que a
+      // última peça entrar — em vez de esperar o sábado.
       // Mês furado é recusado pela própria função — agosto/2026 tem 4 dias que
       // o portal não devolve, e o número do IMEA continua valendo para ele.
       const mensal = await consolidarMensalAnterior(hoje);
-      logger.info("coleta semanal do MT concluída", {
+      logger.info("coleta diária do MT concluída", {
         disparados: pendentes.length,
         falhas: falhas.length,
         cabecas,
@@ -142,9 +154,9 @@ export const coletaSemanalMt = schedules.task({
       return { hoje, disparados: pendentes.length, falhas, cabecas, mensal };
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
-      logger.error("coleta semanal do MT falhou", { erro: mensagem });
+      logger.error("coleta diária do MT falhou", { erro: mensagem });
       try {
-        await alertarOperador("MT semanal NÃO rodou", mensagem);
+        await alertarOperador("MT: a coleta do dia NÃO rodou", mensagem);
       } catch (falhaAlerta) {
         logger.error("falha até no alerta ao operador", {
           erro: falhaAlerta instanceof Error ? falhaAlerta.message : String(falhaAlerta),

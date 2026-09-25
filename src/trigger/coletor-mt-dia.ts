@@ -10,16 +10,16 @@ import { gravarAgregadosDiarios } from "../dados/diario.js";
 import { arquivarBruto } from "../dados/arquivos.js";
 
 /**
- * Coleta UM dia do MT no SINDESA 2. É a unidade de trabalho da coleta semanal.
+ * Coleta UM dia do MT no SINDESA 2. É a unidade de trabalho da coleta diária.
  *
- * Um dia por execução, e não a semana inteira numa só, por três motivos que
+ * Um dia por execução, e não o lote inteiro numa só, por três motivos que
  * valem mais que a economia de uma task: um dia que falha não derruba os
- * outros seis, cada dia ganha o retry do Trigger.dev de graça, e nenhuma
- * execução chega perto do limite de tempo. Medido no servidor deles (sonda de
+ * outros, cada dia ganha o retry do Trigger.dev de graça, e nenhuma execução
+ * chega perto do limite de tempo. Medido no servidor deles (sonda de
  * 23/09/2026): ~5 min para um dia útil de ~800 GTAs.
  *
  * `concurrencyLimit: 1` é a regra de gentileza da casa: o INDEA é serviço
- * público, e a semana inteira disparada de uma vez viraria sete navegadores
+ * público, e o lote disparado de uma vez viraria vários navegadores
  * simultâneos no portal.
  */
 export const coletorMtDia = task({

@@ -37,8 +37,8 @@ export const coletaDiaria = schedules.task({
     // O MT saiu daqui em 23/09/2026. O `coletor-mt` consulta o InfoSindesa, que
     // parou de receber guia nova em 07/08 e responde VAZIO desde então: rodá-lo
     // todo dia só produzia o alerta "dado CONGELADO" às 6h, todo dia, sobre uma
-    // fonte que não vai voltar. O diário do MT agora vem de `coleta-semanal-mt`
-    // (SINDESA 2, sábado) e o mensal continua vindo do IMEA.
+    // fonte que não vai voltar. O diário do MT agora vem de `coleta-diaria-mt`
+    // (SINDESA 2, diária) e o mensal continua vindo do IMEA.
     const { runs } = await batch.triggerByTaskAndWait([
       { task: coletorMs, payload: { janela } },
       { task: coletorRo, payload: { ano, mes } },

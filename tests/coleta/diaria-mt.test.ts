@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diasDaJanela } from "../../src/trigger/coleta-semanal-mt.js";
+import { diasDaJanela } from "../../src/trigger/coleta-diaria-mt.js";
 
 describe("diasDaJanela", () => {
   it("olha para trás e nunca inclui o dia corrente", () => {
@@ -7,8 +7,8 @@ describe("diasDaJanela", () => {
     const dias = diasDaJanela("2026-09-26").map((d) => d.dia);
     expect(dias).not.toContain("2026-09-26");
     expect(dias.at(-1)).toBe("2026-09-25");
-    expect(dias[0]).toBe("2026-09-16");
-    expect(dias).toHaveLength(10);
+    expect(dias[0]).toBe("2026-09-19");
+    expect(dias).toHaveLength(7);
   });
 
   it("devolve do mais antigo para o mais recente", () => {

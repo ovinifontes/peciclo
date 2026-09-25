@@ -17,7 +17,7 @@ Documentos de referência:
 |---|---|---|---|
 | **MS** | IAGRO (endpoint anônimo) | detalhe por GTA | 1 GET → XLSX → `gta_registros` → rollup |
 | **PA** | ADEPARA (Google Drive) | planilha mensal | detecta arquivo novo → `gta_registros` → rollup |
-| **MT** | SINDESA 2 (INDEA, login) | detalhe por GTA | sábado: lista o dia → abre cada GTA → soma → `abate_diario` |
+| **MT** | SINDESA 2 (INDEA, login) | detalhe por GTA | 5h: lista o dia → abre cada GTA → soma → `abate_diario` |
 | **MT** (mensal) | IMEA (PDF público) | agregado mensal | segunda: PDF → `abate_mensal` |
 | **RO** | IDARON (Power BI) | agregado mensal | query DSR → `abate_mensal` *(ver pendência)* |
 
@@ -28,8 +28,9 @@ planilha lê só `abate_mensal`, então não sabe dessa diferença.
 **O MT é o caso torto.** O portal velho (InfoSindesa) parou de receber guia nova
 em 07/08/2026 e responde vazio desde então. O portal novo (SINDESA 2) tem o
 dado, mas não tem nenhum relatório somado por sexo: o número só existe dentro de
-cada GTA, na tabela "Estratificação". Por isso a coleta do MT é **semanal**, não
-diária — cada dia custa abrir ~800 guias, uma por uma. O mensal do MT não vem
+cada GTA, na tabela "Estratificação". Cada dia custa abrir ~800 guias, uma por
+uma, então a coleta do MT roda **às 5h**, separada das outras: o dia novo mais
+os dois anteriores recoletados, em fila. O mensal do MT não vem
 daí: vem do IMEA, que publica em PDF os números do próprio INDEA com ~2 semanas
 de atraso.
 
