@@ -144,7 +144,7 @@ export const coletaDiariaMt = schedules.task({
       // última peça entrar — em vez de esperar o sábado.
       // Mês furado é recusado pela própria função — agosto/2026 tem 4 dias que
       // o portal não devolve, e o número do IMEA continua valendo para ele.
-      const mensal = await consolidarMensalAnterior(hoje);
+      const mensal = await consolidarMensais(hoje);
       logger.info("coleta diária do MT concluída", {
         disparados: pendentes.length,
         falhas: falhas.length,
@@ -168,39 +168,56 @@ export const coletaDiariaMt = schedules.task({
 });
 
 /**
- * Tenta fechar o mensal do mês anterior a partir do diário.
+ * Fecha o mensal de MT a partir do diário — DOIS meses por corrida.
  *
- * Nunca lança: o mensal é um bônus da coleta semanal, não a razão dela. Se
- * falhar, os dias já estão gravados e o IMEA continua cobrindo o mês.
+ * O mês CORRENTE entra parcial, com os dias que já existem, porque é assim que
+ * MS e RO já aparecem e é assim que a planilha se explica ("o mês corrente
+ * aparece parcial"). Sem isto o MT simplesmente SUMIA da linha do mês corrente
+ * enquanto os vizinhos apareciam — foi o que aconteceu com setembro/2026.
+ *
+ * O mês ANTERIOR entra só inteiro: ali o furo é permanente, e somar mês furado
+ * subestimaria para sempre. É a trava que mantém agosto/2026 com o número do
+ * IMEA, já que três dias daquele mês não existem em fonte nenhuma.
+ *
+ * Nunca lança: o mensal é consequência da coleta, não a razão dela. Se falhar,
+ * os dias já estão gravados.
  */
-async function consolidarMensalAnterior(
-  hojeIso: string,
-): Promise<{ competencia: string; gravou: boolean; motivo?: string; total?: number }> {
+async function consolidarMensais(hojeIso: string) {
   const [ano, mes] = hojeIso.split("-").map(Number) as [number, number];
-  const anterior = new Date(Date.UTC(ano, mes - 2, 1));
-  const competencia = `${anterior.getUTCFullYear()}-${String(anterior.getUTCMonth() + 1).padStart(2, "0")}`;
+  const alvos = [
+    { data: new Date(Date.UTC(ano, mes - 1, 1)), parcial: true },
+    { data: new Date(Date.UTC(ano, mes - 2, 1)), parcial: false },
+  ];
 
-  try {
-    const coletaId = await abrirColeta({
-      uf: "MT",
-      tipo: "mensal",
-      janela: { inicio: `${competencia}-01`, fim: `${competencia}-28` },
-    });
-    const r = await consolidarMesDoDiario({
-      uf: "MT",
-      ano: anterior.getUTCFullYear(),
-      mes: anterior.getUTCMonth() + 1,
-      coletaId,
-    });
-    await fecharColeta({
-      id: coletaId,
-      status: r.gravou ? "ok" : "sem_dados",
-      erro: r.motivo ?? null,
-    });
-    return { competencia, ...r };
-  } catch (erro) {
-    const motivo = erro instanceof Error ? erro.message : String(erro);
-    logger.warn("consolidação do mensal de MT falhou; os dias estão gravados", { motivo });
-    return { competencia, gravou: false, motivo };
+  const saida: Array<{ competencia: string; gravou: boolean; motivo?: string; total?: number; dias?: number }> = [];
+  for (const alvo of alvos) {
+    const a = alvo.data.getUTCFullYear();
+    const m = alvo.data.getUTCMonth() + 1;
+    const competencia = `${a}-${String(m).padStart(2, "0")}`;
+    try {
+      const coletaId = await abrirColeta({
+        uf: "MT",
+        tipo: "mensal",
+        janela: { inicio: `${competencia}-01`, fim: `${competencia}-28` },
+      });
+      const r = await consolidarMesDoDiario({
+        uf: "MT",
+        ano: a,
+        mes: m,
+        coletaId,
+        permitirParcial: alvo.parcial,
+      });
+      await fecharColeta({
+        id: coletaId,
+        status: r.gravou ? "ok" : "sem_dados",
+        erro: r.motivo ?? null,
+      });
+      saida.push({ competencia, ...r });
+    } catch (erro) {
+      const motivo = erro instanceof Error ? erro.message : String(erro);
+      logger.warn("consolidação do mensal de MT falhou; os dias estão gravados", { competencia, motivo });
+      saida.push({ competencia, gravou: false, motivo });
+    }
   }
+  return saida;
 }

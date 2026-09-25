@@ -271,9 +271,22 @@ export async function consolidarMesDoDiario(args: {
   ano: number;
   mes: number;
   coletaId: number;
-}): Promise<{ gravou: boolean; motivo?: string; total?: number }> {
-  const { faltam } = await diasDoMesNoDiario(args.uf, args.ano, args.mes);
-  if (faltam.length > 0) {
+  /**
+   * Mês CORRENTE: soma os dias que já existem, sem exigir o mês inteiro.
+   *
+   * É o que MS e RO já fazem — eles escrevem no mensal todos os dias, parcial,
+   * e a planilha mostra o mês corrente incompleto de propósito ("o mês corrente
+   * aparece parcial, com os dias já coletados"). Exigir completude aqui deixava
+   * o MT FORA da planilha do mês corrente enquanto os outros apareciam: regra
+   * mais dura que a dos vizinhos, sem motivo, e o efeito era o estado sumir.
+   *
+   * Para mês FECHADO a exigência continua: ali um furo é permanente, e somar
+   * mês furado subestimaria para sempre.
+   */
+  permitirParcial?: boolean;
+}): Promise<{ gravou: boolean; motivo?: string; total?: number; dias?: number }> {
+  const { presentes, faltam } = await diasDoMesNoDiario(args.uf, args.ano, args.mes);
+  if (faltam.length > 0 && !args.permitirParcial) {
     return {
       gravou: false,
       motivo: `mês incompleto: faltam ${faltam.length} dia(s) (${faltam.slice(0, 5).join(", ")}${faltam.length > 5 ? "…" : ""})`,
@@ -307,11 +320,17 @@ export async function consolidarMesDoDiario(args: {
   }));
   const total = agregados.reduce((s, a) => s + a.quantidade, 0);
   const escritas = await gravarAgregados(agregados, args.coletaId, "sindesa2_gta");
+  void presentes;
   // Zero escritas não é falha: ou o número já era idêntico, ou a precedência
   // recusou rebaixar um total do IMEA. Dizer "gravou" nesse caso seria mentir
   // no log de quem for investigar um mês depois.
   if (escritas === 0) {
-    return { gravou: false, motivo: "nada a mudar (valor idêntico ou o IMEA tem número maior)", total };
+    return {
+      gravou: false,
+      motivo: "nada a mudar (valor idêntico ou o IMEA tem número maior)",
+      total,
+      dias: presentes.size,
+    };
   }
-  return { gravou: true, total };
+  return { gravou: true, total, dias: presentes.size };
 }
