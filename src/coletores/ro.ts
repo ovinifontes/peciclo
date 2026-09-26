@@ -176,3 +176,92 @@ export async function coletarRo(args: {
     { uf: "RO", ano: args.ano, mes: args.mes, finalidade: "ABATE", sexo: "MACHO", quantidade: machos },
   ];
 }
+
+/**
+ * Até que DIA o painel do IDARON tem dado na competência pedida.
+ *
+ * O painel não diz isso em lugar nenhum: ele abre, carrega e mostra número
+ * com carimbo de atualização de hoje, mesmo quando o dado parou semanas
+ * atrás. Foi assim que o congelamento de 11/09/2026 — a migração de
+ * plataforma do órgão — passou onze dias sem ninguém notar.
+ *
+ * A leitura sai de `vw_DASHBOARD_GTA_POR_UNIDADE_SITE`, a única view do
+ * modelo com granularidade de dia. Ela conta GTAs, não animais, e por isso
+ * não serve para compor volume — serve para DATAR o corte, que é o que
+ * faltava. Conferida nos 8 meses fechados de 2026: fecha no último dia do
+ * calendário em todos, inclusive fevereiro em 28. Zero falso positivo.
+ */
+export async function ultimoDiaComDado(args: {
+  ano: number;
+  mes: number;
+  chaveRecurso: string;
+}): Promise<number | null> {
+  const corpo = {
+    version: "1.0.0",
+    queries: [
+      {
+        Query: {
+          Commands: [
+            {
+              SemanticQueryDataShapeCommand: {
+                Query: {
+                  Version: 2,
+                  From: [{ Name: "v", Entity: "vw_DASHBOARD_GTA_POR_UNIDADE_SITE", Type: 0 }],
+                  // A soma de Total_GTA entra junto porque o Power BI não
+                  // devolve linha nenhuma para um Select só de dimensão —
+                  // precisa de uma medida para materializar as linhas. O
+                  // valor dela é descartado; o que interessa é o `dia`.
+                  Select: [
+                    { ...coluna("dia"), Name: "dia" },
+                    {
+                      Aggregation: {
+                        Expression: {
+                          Column: { Expression: { SourceRef: { Source: "v" } }, Property: "Total_GTA" },
+                        },
+                        Function: 0,
+                      },
+                      Name: "gtas",
+                    },
+                  ],
+                  Where: [
+                    filtroIgual("ano", `${args.ano}L`),
+                    filtroIgual("mes", `${args.mes}L`),
+                  ],
+                },
+                Binding: {
+                  Primary: { Groupings: [{ Projections: [0, 1] }] },
+                  DataReduction: { DataVolume: 4, Primary: { Window: { Count: 200 } } },
+                  Version: 1,
+                },
+              },
+            },
+          ],
+        },
+        QueryId: "",
+        ApplicationContext: {
+          DatasetId: DATASET_ID,
+          Sources: [{ ReportId: REPORT_ID, VisualId: VISUAL_ID }],
+        },
+      },
+    ],
+    cancelQueries: [],
+    modelId: MODEL_ID,
+  };
+
+  const resposta = await fetch(QUERYDATA, {
+    method: "POST",
+    headers: { "X-PowerBI-ResourceKey": args.chaveRecurso, "content-type": "application/json" },
+    body: JSON.stringify(corpo),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!resposta.ok) throw new Error(`Power BI respondeu HTTP ${resposta.status} no marcador de dia`);
+
+  const json = (await resposta.json()) as {
+    results?: Array<{ result?: { data?: { dsr?: { DS?: Array<{ PH?: Array<{ DM0?: Array<{ C?: unknown[] }> }> }> } } } }>;
+  };
+  const linhas = json.results?.[0]?.result?.data?.dsr?.DS?.[0]?.PH?.[0]?.DM0 ?? [];
+  const dias = linhas
+    .map((l) => l.C?.[0])
+    .filter((d): d is number => typeof d === "number" && d >= 1 && d <= 31);
+  return dias.length === 0 ? null : Math.max(...dias);
+}

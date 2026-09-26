@@ -1,5 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk";
-import { coletarRo, descobrirRelatorio, extrairChaveRecurso } from "../coletores/ro.js";
+import { coletarRo, descobrirRelatorio, extrairChaveRecurso, ultimoDiaComDado } from "../coletores/ro.js";
 import { abrirColeta, coletaVaziaSuspeita, fecharColeta } from "../dados/coletas.js";
 import { gravarAgregadosDiarios } from "../dados/diario.js";
 import { gravarAgregados } from "../dados/mensal.js";
@@ -88,6 +88,51 @@ export const coletorRo = task({
         }
       } catch (erro) {
         logger.warn("diário do RO por diferença indisponível; mensal intacto", {
+          erro: erro instanceof Error ? erro.message : String(erro),
+        });
+      }
+
+      // SENTINELA DE COMPLETUDE — o painel não diz até onde tem dado.
+      //
+      // Ele abre, carrega e mostra número com carimbo de atualização de hoje
+      // mesmo quando a fonte parou semanas atrás. Foi assim que o
+      // congelamento de 11/09/2026 (migração de plataforma do IDARON) passou
+      // ONZE DIAS sem ninguém notar — o sistema não sabia distinguir
+      // "domingo, sem movimento" de "a fonte morreu".
+      //
+      // O marcador é o último dia presente na única view do modelo com
+      // granularidade diária. Em try/catch próprio: um alerta que falha não
+      // pode derrubar uma coleta que deu certo.
+      try {
+        const ultimoDia = await ultimoDiaComDado({
+          ano: payload.ano,
+          mes: payload.mes,
+          chaveRecurso: chave,
+        });
+        const hojeBr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+        const [anoHoje, mesHoje, diaHoje] = hojeBr.split("-").map(Number) as [number, number, number];
+        const ehMesCorrente = payload.ano === anoHoje && payload.mes === mesHoje;
+        // Folga de 2 dias: o painel publica com atraso normal de ~1 dia, e
+        // fim de semana empurra mais um. Alertar antes disso seria ruído.
+        const atraso = ehMesCorrente && ultimoDia !== null ? diaHoje - ultimoDia : 0;
+
+        logger.info("completude do painel do IDARON", { ultimoDia, atraso });
+
+        if (atraso > 3) {
+          await alertarOperador(
+            `RO: painel CONGELADO há ${atraso} dia(s) (dado só até ${String(ultimoDia).padStart(2, "0")}/${String(payload.mes).padStart(2, "0")})`,
+            "O painel do IDARON responde e mostra número, mas a fonte que o alimenta parou. " +
+              `Último dia com dado: ${ultimoDia}. Hoje: ${diaHoje}.\n\n` +
+              "O diário de RO segue coberto pela consulta do MAPA (fonte 'sigsif_dia', " +
+              "só inspeção federal). O mensal do IDARON fica parado no último valor bom.",
+            // Pela DURAÇÃO, não por texto fixo: assim cada dia é notícia nova
+            // e a supressão de repetidos não engole o alerta — a lição que o
+            // MT deixou em 08/2026.
+            { chave: `ro-congelado:${atraso}` },
+          );
+        }
+      } catch (erro) {
+        logger.warn("não deu para medir a completude do painel", {
           erro: erro instanceof Error ? erro.message : String(erro),
         });
       }
