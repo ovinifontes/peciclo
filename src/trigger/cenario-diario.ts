@@ -111,8 +111,11 @@ async function executar(dataLocal: string) {
 
   const dossie = montarDossie({
     hoje: dataLocal,
-    ciclo: lerCiclo(abate),
-    serie: serieComposicaoFixa(abate),
+    // `dataLocal`, não o relógio do processo: o mês corrente nunca entra na
+    // série, e o Trigger.dev roda em UTC — no dia 1º isso viraria o mês três
+    // horas antes do Brasil e o dossiê leria um mês a mais.
+    ciclo: lerCiclo(abate, undefined, dataLocal),
+    serie: serieComposicaoFixa(abate, undefined, dataLocal),
     precos,
     futuros,
   });

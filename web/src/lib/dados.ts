@@ -9,9 +9,11 @@ import { createClient } from "@/lib/supabase/server";
 // (config, chave de service_role, Trigger.dev) entra no bundle do site.
 import {
   lerCiclo,
+  mesesBloqueados,
   PAINEL_CICLO,
   serieComposicaoFixa,
   type LeituraCiclo,
+  type MesAvaliado,
   type PontoCiclo,
 } from "../../../src/ciclo/leitura";
 import { lerTudo } from "../../../src/dados/paginar";
@@ -47,7 +49,7 @@ import { ufVisivel } from "../../../src/tipos";
 import type { LinhaDiaria, LinhaMensal } from "../../../src/tipos";
 
 export { agruparDias, diaSemana, PAINEL_CICLO, rotuloDia, serieComMm7, ufsComDado };
-export type { DiaUf, LeituraCiclo, LinhaDiaria, LinhaMensal, PontoCiclo, PontoDiario };
+export type { DiaUf, LeituraCiclo, LinhaDiaria, LinhaMensal, MesAvaliado, PontoCiclo, PontoDiario };
 
 export interface Preco {
   valor: number;
@@ -60,6 +62,12 @@ export interface DadosPainel {
   serie: LinhaMensal[];
   /** A MESMA série consolidada que classifica a fase: é o que o gráfico plota. */
   serieCiclo: PontoCiclo[];
+  /**
+   * Mês já fechado no calendário que a série recusou, se houver. É o que
+   * explica ao leitor por que a competência não é o mês passado — sem isto a
+   * leitura parada parece defeito do site.
+   */
+  mesRetido: MesAvaliado | null;
   precoBoi: Preco | null;
   precoBezerro: Preco | null;
 }
@@ -159,17 +167,23 @@ async function ultimoPreco(serie: string): Promise<Preco | null> {
 /**
  * Corta a série na competência que a leitura escolheu.
  *
- * `serieComposicaoFixa` garante que todo mês tem os três estados, mas NÃO
- * aplica o teste de completude de volume — quem faz isso é `lerCiclo`, ao
- * andar para trás até achar um mês utilizável. Sem este corte, o gráfico
- * plotaria justamente os meses que a leitura reprovou: em 05/08/2026, julho e
- * agosto de 2026, este último com cinco dias de coleta. A curva desabaria de
- * 49,8% para 47,0% e o leitor veria mercado onde há mês pela metade — o mesmo
- * erro da composição variável, só que no eixo do tempo.
+ * `serieComposicaoFixa` já recusa mês incompleto, mas a leitura pode recuar
+ * mais: sem três meses SEGUIDOS não há média móvel de 3, e `lerCiclo` anda para
+ * trás até achar um mês em que ela exista. Este corte faz a curva parar no mesmo
+ * lugar. Sem ele o gráfico plotaria meses que a frase acima não usou, e a ponta
+ * solta leria como mercado — o mesmo erro da composição variável, só que no eixo
+ * do tempo.
  *
  * Efeito colateral desejado: a curva termina exatamente na competência escrita
  * no bloco Ciclo, então gráfico e texto nunca discordam.
  */
+/** Verdadeiro se o mês avaliado é posterior à competência da leitura. */
+function depoisDa(mes: MesAvaliado, leitura: LeituraCiclo): boolean {
+  const ate = leitura.competencia;
+  if (!ate) return true;
+  return mes.ano * 12 + mes.mes > ate.ano * 12 + ate.mes;
+}
+
 function ateACompetencia(pontos: PontoCiclo[], leitura: LeituraCiclo): PontoCiclo[] {
   const ate = leitura.competencia;
   // Sem competência não há leitura: também não há curva honesta para desenhar.
@@ -247,7 +261,7 @@ export async function montarContextoChat(): Promise<string> {
   const dossie = montarDossie({
     // O dia do cliente, não o do servidor: a Vercel roda em UTC e viraria a
     // data três horas antes do Brasil.
-    hoje: new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
+    hoje: hojeSaoPaulo(),
     ciclo: lerCiclo(abate),
     serie: serieComposicaoFixa(abate),
     precos,
@@ -312,12 +326,18 @@ export async function obterDadosPainel(): Promise<DadosPainel> {
   // `serieComposicaoFixa` é a mesma função que `lerCiclo` usa por dentro, e
   // vem da raiz: o gráfico não pode plotar uma curva calculada por outro
   // caminho que a frase "retenção de matrizes" logo acima dele.
-  const leitura = lerCiclo(serie);
+  // O dia vem daqui, não do relógio do servidor: a Vercel roda em UTC e o mês
+  // corrente (que nunca entra na série) viraria três horas antes do Brasil.
+  const hoje = hojeSaoPaulo();
+  const leitura = lerCiclo(serie, PAINEL_CICLO, hoje);
 
   return {
     leitura,
     serie,
-    serieCiclo: ateACompetencia(serieComposicaoFixa(serie), leitura),
+    serieCiclo: ateACompetencia(serieComposicaoFixa(serie, PAINEL_CICLO, hoje), leitura),
+    // Só o que atrasa a leitura AGORA: um mês recusado lá atrás (estado que
+    // ainda não publicava em 2024) já foi superado e só viraria ruído.
+    mesRetido: mesesBloqueados(serie, PAINEL_CICLO, hoje).find((m) => depoisDa(m, leitura)) ?? null,
     precoBoi,
     precoBezerro,
   };

@@ -24,6 +24,12 @@ const MESES = [
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ];
 
+/** "RO" / "MS e RO" / "MT, MS e RO" — do jeito que se lê em voz alta. */
+function listar(ufs: string[]): string {
+  if (ufs.length <= 1) return ufs[0] ?? "";
+  return `${ufs.slice(0, -1).join(", ")} e ${ufs.at(-1)}`;
+}
+
 const TEXTO_FASE: Record<LeituraCiclo["fase"], string> = {
   retencao: "Retenção de matrizes",
   liquidacao: "Liquidação de matrizes",
@@ -97,7 +103,7 @@ export default async function Painel({
   // componente de cliente precisa de `new Date()` (hydration mismatch).
   const hoje = hojeSaoPaulo();
 
-  const [{ leitura, serie, serieCiclo, precoBoi, precoBezerro }, cenario, linhasDiarias] =
+  const [{ leitura, serie, serieCiclo, mesRetido, precoBoi, precoBezerro }, cenario, linhasDiarias] =
     await Promise.all([obterDadosPainel(), lerCenarioMaisRecente(), lerAbateDiario()]);
 
   // Agrupamento e MM7 pré-computados AQUI (funções puras da raiz, as mesmas da
@@ -138,16 +144,30 @@ export default async function Painel({
           </dl>
         ) : (
           <p className="mt-4 border-t pt-3 text-sm text-neutral-600">
-            Nenhum mês passou no teste de completude — sem leitura de ciclo por enquanto.
+            Nenhum mês fechou com os três estados — sem leitura de ciclo por enquanto.
+          </p>
+        )}
+
+        {mesRetido && (
+          <p className="mt-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+            <strong>
+              {MESES[mesRetido.mes - 1]} de {mesRetido.ano} ainda não entrou na leitura.
+            </strong>{" "}
+            {mesRetido.ausentes.length > 0 &&
+              `${listar(mesRetido.ausentes)} ${mesRetido.ausentes.length > 1 ? "não publicaram" : "não publicou"} o mês. `}
+            {mesRetido.implausiveis.length > 0 &&
+              `${listar(mesRetido.implausiveis)} ${mesRetido.implausiveis.length > 1 ? "publicaram números" : "publicou número"} muito abaixo do próprio nível recente — fonte parada no meio do mês, não queda de mercado. `}
+            A competência acima segue no último mês inteiro e confiável.
           </p>
         )}
 
         <p className="mt-3 text-xs leading-relaxed text-neutral-500">
-          Consolidado de composição fixa: um mês só entra quando {estados} têm dado, e só vale se o
-          volume estiver em pelo menos 90% do mesmo mês do ano anterior — por isso a competência
-          acima costuma ficar um mês atrás do calendário. Este percentual{" "}
-          <strong>não é igual</strong> ao da planilha: lá todo mês publicado entra, aqui só os que
-          passam nesse teste. São recortes diferentes, os dois corretos.
+          Consolidado de composição fixa: um mês só entra quando {estados} têm dado, o mês já
+          fechou no calendário e nenhum estado veio com número implausível para o próprio nível —
+          por isso a competência acima costuma ficar um mês atrás do calendário. Ela não espera
+          volume nenhum: abate caindo no ano é leitura de ciclo, não dado incompleto. Este
+          percentual <strong>não é igual</strong> ao da planilha: lá todo mês publicado entra, aqui
+          só os que passam nesses testes. São recortes diferentes, os dois corretos.
         </p>
       </section>
 
@@ -191,8 +211,9 @@ export default async function Painel({
         <p className="mt-1 text-sm text-neutral-600">
           É exatamente a série que classifica a fase acima: consolidado de composição fixa de{" "}
           {estados}, terminando na competência da leitura. Um mês só vira ponto quando os{" "}
-          {PAINEL_CICLO.length} estados publicaram e o volume passou no teste de completude — um
-          estado ausente ou um mês ainda em coleta desenharia um degrau que parece mercado e não é.
+          {PAINEL_CICLO.length} estados publicaram e o mês fechou inteiro — um
+          estado ausente, uma fonte parada ou um mês ainda em coleta desenharia um degrau que
+          parece mercado e não é.
         </p>
 
         {pontos.length ? (
@@ -208,7 +229,7 @@ export default async function Painel({
           </>
         ) : (
           <p className="mt-4 text-sm text-neutral-600">
-            Sem meses utilizáveis ({estados} juntos e volume completo) — nada para desenhar.
+            Sem meses utilizáveis ({estados} juntos, com o mês fechado) — nada para desenhar.
           </p>
         )}
       </section>
@@ -267,8 +288,8 @@ export default async function Painel({
           titulo="Abate mensal por estado"
           descricao={
             <p>
-              O dado cru por trás de tudo acima, estado por estado e sexo por sexo, incluindo os
-              meses que ainda não passaram no teste de completude do consolidado.
+              O dado cru por trás de tudo acima, estado por estado e sexo por sexo, incluindo o
+              mês em curso e os meses que o consolidado ainda não aceitou.
             </p>
           }
           tabela={<TabelaMensal serie={serie} />}
