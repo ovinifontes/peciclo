@@ -268,7 +268,7 @@ export default function ExploradorDiario({
       return (
         <>
           {comKpis && (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none lg:grid-rows-2">
               {cartoesKpiDiario(indicadores, cortes.assentando)}
             </div>
           )}
@@ -297,7 +297,7 @@ export default function ExploradorDiario({
     return (
       <>
         {comKpis && (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none lg:grid-rows-2">
             {cartoesKpiDiario(indicadores, cortes.assentando)}
           </div>
         )}
@@ -412,6 +412,14 @@ export function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: strin
       : "sem o mesmo dia da semana anterior";
   const acumulado = ind.acumuladoMes;
   const notaMes = acumulado ? notaAcumulado(acumulado) : "sem dia completo por todos";
+  const anterior = ind.acumuladoMesAnterior;
+  const notaMesAnterior = anterior
+    ? `vs ${faixaDias(anterior)}, média diária`
+    : "sem a mesma janela do mês anterior";
+  // ORDEM DOS FILHOS = COLUNAS, não linhas: as grades (tela em lg e cartão de
+  // exportação) preenchem por coluna (`grid-flow-col`, 2 linhas), então cada
+  // par [dia, mês] cai um sobre o outro — pedido do cliente em 28/09/2026. No
+  // celular (2 colunas, fluxo por linha) os mesmos pares saem lado a lado.
   return (
     <>
       <Kpi
@@ -420,9 +428,19 @@ export function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: strin
         nota={notaDia}
       />
       <Kpi
+        rotulo="Acumulado no mês"
+        valor={acumulado ? inteiro.format(acumulado.total) : "—"}
+        nota={notaMes}
+      />
+      <Kpi
         rotulo="Fêmeas no abate"
         valor={ind.pctFemeasDia !== null ? `${umaCasa.format(ind.pctFemeasDia)}%` : "—"}
         nota={notaDia}
+      />
+      <Kpi
+        rotulo="Fêmeas no mês"
+        valor={acumulado?.pctFemeas != null ? `${umaCasa.format(acumulado.pctFemeas)}%` : "—"}
+        nota={notaMes}
       />
       <Kpi
         rotulo="Total vs semana anterior"
@@ -430,19 +448,9 @@ export function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: strin
         nota={notaVs}
       />
       <Kpi
-        rotulo="Fêmeas vs semana anterior"
-        valor={ind.variacaoFemeasPct !== null ? `${comSinal.format(ind.variacaoFemeasPct)}%` : "—"}
-        nota={notaVs}
-      />
-      <Kpi
-        rotulo="Acumulado no mês"
-        valor={acumulado ? inteiro.format(acumulado.total) : "—"}
-        nota={notaMes}
-      />
-      <Kpi
-        rotulo="Fêmeas no mês"
-        valor={acumulado?.pctFemeas != null ? `${umaCasa.format(acumulado.pctFemeas)}%` : "—"}
-        nota={notaMes}
+        rotulo="Fêmeas vs mês anterior"
+        valor={ind.variacaoFemeasMesPct !== null ? `${comSinal.format(ind.variacaoFemeasMesPct)}%` : "—"}
+        nota={notaMesAnterior}
       />
     </>
   );
@@ -458,9 +466,13 @@ const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "s
 function notaAcumulado(a: AcumuladoMes): string {
   const mes = MESES_CURTOS[Number(a.competencia.slice(5, 7)) - 1];
   const ano = a.competencia.slice(2, 4);
-  const faixa = `${Number(a.de.slice(8, 10))} a ${rotuloDia(a.ate)}`;
   const buraco = a.dias < a.diasCorridos ? ` · ${a.dias} de ${a.diasCorridos} dias` : "";
-  return `${mes}/${ano} · ${faixa}${buraco}`;
+  return `${mes}/${ano} · ${faixaDias(a)}${buraco}`;
+}
+
+/** "1 a 25/08". */
+function faixaDias(a: AcumuladoMes): string {
+  return `${Number(a.de.slice(8, 10))} a ${rotuloDia(a.ate)}`;
 }
 
 /**

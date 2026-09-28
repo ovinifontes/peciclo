@@ -20,7 +20,14 @@ import { dataPorExtenso } from "./exportar";
  * de leiaute são fixas — `grid-cols-4` SEM prefixo responsivo, porque media
  * query olha o viewport do celular e mentiria dentro do cartão de 1080px.
  */
-const GRADE_KPI = { 3: "grid-cols-3", 4: "grid-cols-4" } as const;
+/**
+ * 3 = seis cartões em 2 linhas preenchidas POR COLUNA: o par [dia, mês] de
+ * cada indicador fica um sobre o outro (ver a ordem em `cartoesKpiDiario`).
+ */
+const GRADE_KPI = {
+  3: "grid-flow-col auto-cols-fr grid-rows-2",
+  4: "grid-cols-4",
+} as const;
 
 export default function CartaoExportavel({
   titulo = "Abate mensal por estado",

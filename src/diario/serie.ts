@@ -73,6 +73,18 @@ export interface IndicadoresDiarios {
   diaReferencia: string | null;
   /** O mês do dia de referência, acumulado até ele. Null sem dia completo. */
   acumuladoMes: AcumuladoMes | null;
+  /**
+   * A MESMA janela (do dia 1º ao mesmo dia do mês) no mês anterior — a única
+   * comparação honesta com um mês em andamento. Null sem dia completo nela.
+   */
+  acumuladoMesAnterior: AcumuladoMes | null;
+  /**
+   * Fêmeas por dia da janela deste mês contra a do mês anterior, em %.
+   * MÉDIA diária e não soma, de propósito: as duas janelas podem ter buracos
+   * diferentes (domingo sem registro no RO, os três dias da migração do MT em
+   * agosto/2026), e somar 22 dias contra 19 inventaria +15% que não existe.
+   */
+  variacaoFemeasMesPct: number | null;
   /** D-7 exato do dia de referência (mesmo dia da semana anterior). */
   diaComparacao: string | null;
   totalDia: number | null;
@@ -81,9 +93,13 @@ export interface IndicadoresDiarios {
   pctFemeasDia: number | null;
   /** Nulos quando o D-7 não existe ou está incompleto para alguma UF pedida. */
   totalD7: number | null;
-  femeasD7: number | null;
   variacaoTotalPct: number | null;
-  variacaoFemeasPct: number | null;
+}
+
+/** "2026-01" → "2025-12"; "2026-09" → "2026-08". */
+function mesAnterior(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number) as [number, number];
+  return mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
 }
 
 /** Soma `dias` dias corridos a um ISO, por aritmética UTC (imune a DST). */
@@ -178,14 +194,14 @@ export function indicadoresDiarios(dias: DiaUf[], ufs: UF[]): IndicadoresDiarios
   const nulo: IndicadoresDiarios = {
     diaReferencia: null,
     acumuladoMes: null,
+    acumuladoMesAnterior: null,
+    variacaoFemeasMesPct: null,
     diaComparacao: null,
     totalDia: null,
     femeasDia: null,
     pctFemeasDia: null,
     totalD7: null,
-    femeasD7: null,
     variacaoTotalPct: null,
-    variacaoFemeasPct: null,
   };
   if (ufs.length === 0) return nulo;
 
@@ -220,44 +236,57 @@ export function indicadoresDiarios(dias: DiaUf[], ufs: UF[]): IndicadoresDiarios
   const diaComparacao = somarDias(diaReferencia, -7);
   const anterior = somar(diaComparacao);
 
-  // Do dia 1º do mês de referência até ele, só dias completos por todas.
-  const competencia = diaReferencia.slice(0, 7);
-  const diasDoMes = diasCompletos.filter((d) => d.startsWith(competencia));
-  let totalMes = 0;
-  let femeasMes = 0;
-  for (const d of diasDoMes) {
-    const soma = somar(d)!;
-    totalMes += soma.total;
-    femeasMes += soma.femeas;
-  }
-  const de = diasDoMes[0]!;
-  const acumuladoMes: AcumuladoMes = {
-    competencia,
-    de,
-    ate: diaReferencia,
-    dias: diasDoMes.length,
-    diasCorridos: Number(diaReferencia.slice(8, 10)) - Number(de.slice(8, 10)) + 1,
-    total: totalMes,
-    femeas: femeasMes,
-    pctFemeas: totalMes > 0 ? (femeasMes / totalMes) * 100 : null,
+  // Do dia 1º de `competencia` até `ate` (inclusive), só dias completos por
+  // todas. `ate` pode nem existir no calendário ("2026-09-31" ao espelhar um
+  // 31/10): a comparação é de texto, e o dia que não existe só não aparece.
+  const acumular = (competencia: string, ate: string): AcumuladoMes | null => {
+    const diasDoMes = diasCompletos.filter((d) => d.startsWith(competencia) && d <= ate);
+    if (diasDoMes.length === 0) return null;
+    let total = 0;
+    let femeas = 0;
+    for (const d of diasDoMes) {
+      const soma = somar(d)!;
+      total += soma.total;
+      femeas += soma.femeas;
+    }
+    const de = diasDoMes[0]!;
+    const ultimo = diasDoMes.at(-1)!;
+    return {
+      competencia,
+      de,
+      ate: ultimo,
+      dias: diasDoMes.length,
+      diasCorridos: Number(ultimo.slice(8, 10)) - Number(de.slice(8, 10)) + 1,
+      total,
+      femeas,
+      pctFemeas: total > 0 ? (femeas / total) * 100 : null,
+    };
   };
+
+  const competencia = diaReferencia.slice(0, 7);
+  const acumuladoMes = acumular(competencia, diaReferencia);
+  const acumuladoMesAnterior = acumular(
+    mesAnterior(competencia),
+    `${mesAnterior(competencia)}-${diaReferencia.slice(8, 10)}`,
+  );
+  const femeasPorDia = (a: AcumuladoMes) => a.femeas / a.dias;
 
   return {
     diaReferencia,
     acumuladoMes,
+    acumuladoMesAnterior,
+    variacaoFemeasMesPct:
+      acumuladoMes && acumuladoMesAnterior && femeasPorDia(acumuladoMesAnterior) > 0
+        ? (femeasPorDia(acumuladoMes) / femeasPorDia(acumuladoMesAnterior) - 1) * 100
+        : null,
     diaComparacao,
     totalDia: atual.total,
     femeasDia: atual.femeas,
     pctFemeasDia: atual.total > 0 ? (atual.femeas / atual.total) * 100 : null,
     totalD7: anterior ? anterior.total : null,
-    femeasD7: anterior ? anterior.femeas : null,
     variacaoTotalPct:
       anterior && anterior.total > 0
         ? ((atual.total - anterior.total) / anterior.total) * 100
-        : null,
-    variacaoFemeasPct:
-      anterior && anterior.femeas > 0
-        ? ((atual.femeas - anterior.femeas) / anterior.femeas) * 100
         : null,
   };
 }

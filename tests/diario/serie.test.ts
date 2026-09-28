@@ -175,9 +175,7 @@ describe("indicadoresDiarios", () => {
     expect(ind.femeasDia).toBe(780);
     expect(ind.pctFemeasDia).toBeCloseTo((780 / 2200) * 100, 6);
     expect(ind.totalD7).toBe(2000);
-    expect(ind.femeasD7).toBe(700);
     expect(ind.variacaoTotalPct).toBeCloseTo(10, 6);
-    expect(ind.variacaoFemeasPct).toBeCloseTo((80 / 700) * 100, 6);
   });
 
   it("acumula o mês do dia de referência, só com os dias completos por todas", () => {
@@ -193,6 +191,53 @@ describe("indicadoresDiarios", () => {
       femeas: 700 + 5 * 720 + 780,
       pctFemeas: ((700 + 5 * 720 + 780) / (2000 + 5 * 2000 + 2200)) * 100,
     });
+  });
+
+  it("compara com a MESMA janela do mês anterior, por média diária", () => {
+    // Setembro: 1 a 3 completos (3 dias). Agosto: 1 e 3 completos, o 2 sem o
+    // MS — 2 dias em 3 corridos. Por dia: set 200 fêmeas, ago 150 → +33,3%.
+    // A soma (600 vs 300) diria +100%, e metade disso seria o buraco.
+    const dados = agruparDias([
+      ...dia("MT", "2026-08-01", 100, 100), ...dia("MS", "2026-08-01", 50, 50),
+      ...dia("MT", "2026-08-02", 100, 100),
+      ...dia("MT", "2026-08-03", 100, 100), ...dia("MS", "2026-08-03", 50, 50),
+      ...dia("MT", "2026-09-01", 150, 100), ...dia("MS", "2026-09-01", 50, 50),
+      ...dia("MT", "2026-09-02", 150, 100), ...dia("MS", "2026-09-02", 50, 50),
+      ...dia("MT", "2026-09-03", 150, 100), ...dia("MS", "2026-09-03", 50, 50),
+    ]);
+    const ind = indicadoresDiarios(dados, ["MT", "MS"]);
+    expect(ind.acumuladoMes).toMatchObject({ competencia: "2026-09", dias: 3, femeas: 600 });
+    expect(ind.acumuladoMesAnterior).toMatchObject({
+      competencia: "2026-08", de: "2026-08-01", ate: "2026-08-03", dias: 2, diasCorridos: 3, femeas: 300,
+    });
+    expect(ind.variacaoFemeasMesPct).toBeCloseTo((200 / 150 - 1) * 100, 6);
+  });
+
+  it("a janela do mês anterior para no mesmo dia do mês, não no fim dele", () => {
+    const dados = agruparDias([
+      ...["01", "02", "03", "04", "05"].flatMap((d) => dia("MS", `2026-08-${d}`, 100, 100)),
+      ...dia("MS", "2026-09-01", 100, 100),
+      ...dia("MS", "2026-09-02", 100, 100),
+    ]);
+    const ind = indicadoresDiarios(dados, ["MS"]);
+    // Referência 02/09 → espelho 1 a 02/08; os dias 03–05/08 ficam de fora.
+    expect(ind.acumuladoMesAnterior).toMatchObject({ de: "2026-08-01", ate: "2026-08-02", dias: 2 });
+  });
+
+  it("vira o ano ao buscar o mês anterior de janeiro", () => {
+    const dados = agruparDias([
+      ...dia("MS", "2025-12-01", 100, 100),
+      ...dia("MS", "2026-01-01", 120, 100),
+    ]);
+    const ind = indicadoresDiarios(dados, ["MS"]);
+    expect(ind.acumuladoMesAnterior?.competencia).toBe("2025-12");
+    expect(ind.variacaoFemeasMesPct).toBeCloseTo(20, 6);
+  });
+
+  it("sem o mês anterior, a variação fica nula em vez de inventar base", () => {
+    const ind = indicadoresDiarios(cenario, ["MT", "MS"]);
+    expect(ind.acumuladoMesAnterior).toBeNull();
+    expect(ind.variacaoFemeasMesPct).toBeNull();
   });
 
   it("o acumulado não atravessa a virada do mês", () => {
@@ -224,7 +269,7 @@ describe("indicadoresDiarios", () => {
     expect(ind.diaComparacao).toBe("2026-08-09");
     expect(ind.totalD7).toBeNull();
     expect(ind.variacaoTotalPct).toBeNull();
-    expect(ind.variacaoFemeasPct).toBeNull();
+
   });
 
   it("D-7 presente mas sem os dois sexos não vale como comparação", () => {
