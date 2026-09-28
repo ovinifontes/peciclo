@@ -1,5 +1,36 @@
-import type { AgregadoDiario, Janela, UF } from "../tipos.js";
+import { ufVisivel, type AgregadoDiario, type Janela, type LinhaDiaria, type UF } from "../tipos.js";
 import { obterCliente } from "./cliente.js";
+import { lerTudo } from "./paginar.js";
+
+/**
+ * A série diária INTEIRA, até ontem, dos estados visíveis — o que a planilha
+ * do diário leva. Sem corte de janela de propósito: a tela mostra 60 dias
+ * porque quem abre quer ver ontem, mas quem recebe uma planilha quer a série
+ * para abrir no Excel e fazer a própria conta.
+ *
+ * O dia de HOJE fica de fora: ainda está em coleta e sairia menor do que foi.
+ * `hoje` vem de quem chama, no fuso de Brasília — aqui não entra `new Date()`,
+ * que na Vercel e no Trigger.dev (UTC) viraria o dia três horas antes.
+ */
+export async function lerAbateDiarioTudo(hoje: string): Promise<LinhaDiaria[]> {
+  const linhas = await lerTudo<LinhaDiaria>(
+    (de, ate) =>
+      obterCliente()
+        .from("peciclo_abate_diario")
+        .select("uf, data, sexo, quantidade")
+        // Igualdade exata, nunca prefixo — a mesma regra do mensal: "ABATE
+        // SANITÁRIO" e "SACRIFÍCIO" não são decisão do pecuarista.
+        .eq("finalidade", "ABATE")
+        .lt("data", hoje)
+        // Ordem total (data, uf, sexo): páginas do lerTudo nunca se sobrepõem.
+        .order("data")
+        .order("uf")
+        .order("sexo")
+        .range(de, ate) as never,
+    "abate diário",
+  );
+  return linhas.filter((l) => ufVisivel(l.uf));
+}
 
 /**
  * Reagrega gta_registros POR DIA na janela informada (MS). Uma chamada só: a

@@ -80,7 +80,7 @@ export interface DadosPainel {
  * erro, e como a ordem é crescente o que sumiria seriam os meses recentes —
  * ou seja, a leitura do ciclo ficaria velha sem ninguém perceber.
  */
-async function lerAbateMensal(): Promise<LinhaMensal[]> {
+export async function lerAbateMensal(): Promise<LinhaMensal[]> {
   const supabase = await createClient();
   const linhas = await lerTudo<LinhaMensal>(
     (de, ate) =>

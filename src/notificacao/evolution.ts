@@ -1,5 +1,12 @@
 export const XLSX_MIMETYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const PDF_MIMETYPE = "application/pdf";
+
+/** O que `enviarDocumento` sabe mandar. Lista fechada, ver o porquê lá. */
+const MIMETYPE_POR_EXTENSAO: Record<string, string> = {
+  ".xlsx": XLSX_MIMETYPE,
+  ".pdf": PDF_MIMETYPE,
+};
 
 export class EvolutionApiError extends Error {
   status: number;
@@ -155,10 +162,15 @@ export async function enviarDocumento(params: {
     throw new EvolutionApiError("Buffer do arquivo vazio ou inválido.", 0, null);
   }
   // O servidor deriva o mimetype de fileName e ignora o mimetype enviado.
-  // Sem extensão conhecida, o lookup falha e o arquivo chega quebrado.
-  if (!/\.xlsx$/i.test(params.nomeArquivo)) {
+  // Sem extensão conhecida, o lookup falha e o arquivo chega quebrado — por
+  // isso a lista é fechada, e não um `split(".").at(-1)` que aceita qualquer
+  // coisa e só quebra no celular do cliente.
+  const extensao = /\.[a-z0-9]+$/i.exec(params.nomeArquivo)?.[0]?.toLowerCase();
+  const mimetype = extensao ? MIMETYPE_POR_EXTENSAO[extensao] : undefined;
+  if (!mimetype) {
     throw new EvolutionApiError(
-      `nomeArquivo precisa terminar em .xlsx (recebido: "${params.nomeArquivo}").`,
+      `nomeArquivo precisa terminar em ${Object.keys(MIMETYPE_POR_EXTENSAO).join(" ou ")} ` +
+        `(recebido: "${params.nomeArquivo}").`,
       0,
       null,
     );
@@ -171,7 +183,7 @@ export async function enviarDocumento(params: {
     body: JSON.stringify({
       number: normalizarNumero(params.numero),
       mediatype: "document",
-      mimetype: XLSX_MIMETYPE,
+      mimetype,
       fileName: params.nomeArquivo,
       caption: params.legenda ?? "",
       media: params.arquivo.toString("base64"),

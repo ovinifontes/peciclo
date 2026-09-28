@@ -57,7 +57,7 @@ interface CelulaMes {
   machos: number | null;
 }
 
-interface MesAgregado {
+export interface MesAgregado {
   /** "2026-07" — ordena e compara por texto sem montar Date nenhum. */
   chave: string;
   ano: number;
@@ -80,7 +80,7 @@ function mesLongo(chave: string): string {
  * entra `new Date()`, que divergiria entre servidor e navegador.
  * A tabela é outro recorte: lá o parcial aparece, com travessão.
  */
-function agruparMeses(serie: LinhaMensal[], mesCorrente: string): MesAgregado[] {
+export function agruparMeses(serie: LinhaMensal[], mesCorrente: string): MesAgregado[] {
   const porMes = new Map<string, MesAgregado>();
   for (const linha of serie) {
     const chave = `${linha.ano}-${String(linha.mes).padStart(2, "0")}`;
@@ -103,7 +103,7 @@ function agruparMeses(serie: LinhaMensal[], mesCorrente: string): MesAgregado[] 
   return [...porMes.values()].sort((a, b) => a.chave.localeCompare(b.chave));
 }
 
-function totalCelula(celula?: CelulaMes): number | null {
+export function totalCelula(celula?: CelulaMes): number | null {
   if (!celula || (celula.femeas === null && celula.machos === null)) return null;
   return (celula.femeas ?? 0) + (celula.machos ?? 0);
 }
@@ -120,7 +120,7 @@ function pctCelula(celula?: CelulaMes): number | null {
  * competência, uma coluna por UF. Serve às DUAS visões de gráfico: as Linhas
  * recebem a série inteira, as Colunas recebem o recorte dos últimos 12 meses.
  */
-function linhasDoGrafico(
+export function linhasDoGrafico(
   meses: MesAgregado[],
   ufs: UF[],
   metrica: "total" | "pct",
@@ -150,7 +150,7 @@ function entradasDeSexo(meses: MesAgregado[]): EntradaSexo[] {
   return saida;
 }
 
-interface Indicadores {
+export interface Indicadores {
   /** "julho de 2026" — a competência dos números, dita em todos os cartões. */
   competencia: string | null;
   total: number | null;
@@ -166,7 +166,7 @@ interface Indicadores {
  * fosse inteiro. Com o PA ligado a competência costuma recuar uns dois meses;
  * é o preço da honestidade, e os cartões dizem qual mês estão mostrando.
  */
-function calcularIndicadores(meses: MesAgregado[], ufs: UF[]): Indicadores {
+export function calcularIndicadores(meses: MesAgregado[], ufs: UF[]): Indicadores {
   const vazio: Indicadores = {
     competencia: null, total: null, pct: null, varTotal: null, varPct: null, mesBase: null,
   };
@@ -471,7 +471,7 @@ function Kpi({ rotulo, valor, nota }: { rotulo: string; valor: string; nota: str
  * Os quatro cartões de KPI, sem a grade em volta — a tela os põe numa grade
  * responsiva (2×2 no celular), o cartão de exportação numa linha fixa de 4.
  */
-function cartoesKpi(ind: Indicadores): ReactNode {
+export function cartoesKpi(ind: Indicadores): ReactNode {
   return (
     <>
       <Kpi
@@ -495,6 +495,38 @@ function cartoesKpi(ind: Indicadores): ReactNode {
         nota={ind.mesBase ? `vs ${ind.mesBase}` : "sem o mesmo mês do ano anterior"}
       />
     </>
+  );
+}
+
+/**
+ * `SecoesGrafico` com o Corpo já escolhido pela visão — o que a página de
+ * impressão do mensal consome, espelhando `SecoesGraficoDiario`. Qual
+ * componente desenha qual visão é assunto deste arquivo, não de quem fotografa.
+ */
+export function SecoesGraficoMensal({
+  ver,
+  ufs,
+  linhasTotal,
+  linhasPct,
+  cortadas,
+  mesCorrente,
+}: {
+  ver: Ver;
+  ufs: UF[];
+  linhasTotal: LinhaGrafico[];
+  linhasPct: LinhaGrafico[];
+  cortadas: boolean;
+  mesCorrente: string;
+}) {
+  return (
+    <SecoesGrafico
+      Corpo={ver === "colunas" ? GraficoColunas : GraficoLinhas}
+      ufs={ufs}
+      linhasTotal={linhasTotal}
+      linhasPct={linhasPct}
+      cortadas={cortadas}
+      mesCorrente={mesCorrente}
+    />
   );
 }
 
