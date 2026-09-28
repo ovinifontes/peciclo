@@ -13,6 +13,7 @@ import {
   indicadoresDiarios,
   rotuloDia,
   ufsComDado,
+  type AcumuladoMes,
   type IndicadoresDiarios,
   type PontoDiario,
 } from "../../../../../src/diario/serie";
@@ -267,7 +268,7 @@ export default function ExploradorDiario({
       return (
         <>
           {comKpis && (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
               {cartoesKpiDiario(indicadores, cortes.assentando)}
             </div>
           )}
@@ -296,7 +297,7 @@ export default function ExploradorDiario({
     return (
       <>
         {comKpis && (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             {cartoesKpiDiario(indicadores, cortes.assentando)}
           </div>
         )}
@@ -371,6 +372,7 @@ export default function ExploradorDiario({
           rotulo={ROTULO_VER[ver]}
           ufs={cartao.ufs}
           kpis={cartoesKpiDiario(cartao.ind, cortes.assentando)}
+          colunasKpi={3}
         >
           {ver === "tabela" ? tabela : corpoGrafico(cartao.ind, false)}
         </Exportavel>
@@ -408,6 +410,8 @@ export function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: strin
     ind.diaComparacao && ind.totalD7 !== null
       ? `vs ${diaSemana(ind.diaComparacao)}, ${rotuloDia(ind.diaComparacao)}`
       : "sem o mesmo dia da semana anterior";
+  const acumulado = ind.acumuladoMes;
+  const notaMes = acumulado ? notaAcumulado(acumulado) : "sem dia completo por todos";
   return (
     <>
       <Kpi
@@ -430,8 +434,33 @@ export function cartoesKpiDiario(ind: IndicadoresDiarios, corteAssentando: strin
         valor={ind.variacaoFemeasPct !== null ? `${comSinal.format(ind.variacaoFemeasPct)}%` : "—"}
         nota={notaVs}
       />
+      <Kpi
+        rotulo="Acumulado no mês"
+        valor={acumulado ? inteiro.format(acumulado.total) : "—"}
+        nota={notaMes}
+      />
+      <Kpi
+        rotulo="Fêmeas no mês"
+        valor={acumulado?.pctFemeas != null ? `${umaCasa.format(acumulado.pctFemeas)}%` : "—"}
+        nota={notaMes}
+      />
     </>
   );
+}
+
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/**
+ * "setembro/26 · 1 a 27/09" — e, se algum dia do intervalo ficou de fora por
+ * um estado não ter publicado, diz quantos entraram, para o total não passar
+ * por mês inteiro quando não é.
+ */
+function notaAcumulado(a: AcumuladoMes): string {
+  const mes = MESES_CURTOS[Number(a.competencia.slice(5, 7)) - 1];
+  const ano = a.competencia.slice(2, 4);
+  const faixa = `${Number(a.de.slice(8, 10))} a ${rotuloDia(a.ate)}`;
+  const buraco = a.dias < a.diasCorridos ? ` · ${a.dias} de ${a.diasCorridos} dias` : "";
+  return `${mes}/${ano} · ${faixa}${buraco}`;
 }
 
 /**

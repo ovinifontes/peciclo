@@ -20,12 +20,15 @@ import { dataPorExtenso } from "./exportar";
  * de leiaute são fixas — `grid-cols-4` SEM prefixo responsivo, porque media
  * query olha o viewport do celular e mentiria dentro do cartão de 1080px.
  */
+const GRADE_KPI = { 3: "grid-cols-3", 4: "grid-cols-4" } as const;
+
 export default function CartaoExportavel({
   titulo = "Abate mensal por estado",
   rotulo,
   ufs,
   kpis,
   dataCabecalho,
+  colunasKpi = 4,
   children,
 }: {
   /** Título da seção fotografada — a diária passa o dela; o padrão é o mensal. */
@@ -34,8 +37,14 @@ export default function CartaoExportavel({
   rotulo: string;
   /** Estados da legenda — os filtrados nos gráficos, os quatro na tabela. */
   ufs: readonly UF[];
-  /** Os quatro cartões de KPI, prontos — a formatação mora no explorador. */
+  /** Os cartões de KPI, prontos — a formatação mora no explorador. */
   kpis: ReactNode;
+  /**
+   * Cartões por linha: 4 no mensal (quatro KPIs), 3 no diário (seis KPIs, em
+   * duas linhas). Classe literal por chave, e não interpolada: o Tailwind só
+   * gera o que consegue ler no fonte.
+   */
+  colunasKpi?: 3 | 4;
   /**
    * Data do cabeçalho já formatada. A página de impressão a calcula no
    * SERVIDOR (fuso de Brasília) para SSR e hidratação nunca divergirem; o
@@ -83,7 +92,7 @@ export default function CartaoExportavel({
       {/* O seletor arbitrário solta a rolagem interna da tabela: no cartão ela
           aparece INTEIRA, sem o corte de 26rem que a tela precisa ter. */}
       <div className="flex flex-col gap-5 [&_[data-exportar-expandir]]:max-h-none [&_[data-exportar-expandir]]:overflow-visible">
-        <div className="grid grid-cols-4 gap-3">{kpis}</div>
+        <div className={`grid gap-3 ${GRADE_KPI[colunasKpi]}`}>{kpis}</div>
 
         {/* Legenda parada no lugar dos chips interativos — botão em foto é
             promessa que a imagem não cumpre. */}

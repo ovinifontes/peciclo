@@ -129,6 +129,7 @@ export default function CartaoImpressaoDiario({
         rotulo={ROTULO_VER[visao]}
         ufs={ufs}
         kpis={cartoesKpiDiario(ind, cortes.assentando)}
+        colunasKpi={3}
         dataCabecalho={dataCabecalho}
       >
         {visao === "tabela" ? (

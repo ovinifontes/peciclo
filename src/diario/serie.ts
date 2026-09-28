@@ -45,9 +45,34 @@ export interface PontoDiario extends DiaUf {
   mm7PctFemeas: number | null;
 }
 
+/**
+ * O mês do dia de referência somado do dia 1º até ele — o "quanto já foi este
+ * mês" que o cliente pediu em 28/09/2026. Entram só os dias completos por
+ * TODAS as UFs pedidas, pela mesma regra do dia de referência: um dia em que
+ * um estado não publicou somaria menos do que foi e leria como mês fraco.
+ * `dias` e `diasCorridos` existem para a nota dizer quando faltou algum.
+ */
+export interface AcumuladoMes {
+  /** "2026-09". */
+  competencia: string;
+  /** Primeiro e último dia somados, ISO. */
+  de: string;
+  ate: string;
+  /** Dias que entraram na soma. */
+  dias: number;
+  /** Dias corridos de `de` a `ate` — se maior que `dias`, houve buraco. */
+  diasCorridos: number;
+  total: number;
+  femeas: number;
+  /** 0–100. */
+  pctFemeas: number | null;
+}
+
 export interface IndicadoresDiarios {
   /** Último dia com ambos os sexos de TODAS as UFs pedidas; null sem dia completo. */
   diaReferencia: string | null;
+  /** O mês do dia de referência, acumulado até ele. Null sem dia completo. */
+  acumuladoMes: AcumuladoMes | null;
   /** D-7 exato do dia de referência (mesmo dia da semana anterior). */
   diaComparacao: string | null;
   totalDia: number | null;
@@ -152,6 +177,7 @@ export function serieComMm7(dias: DiaUf[], minimoDias: number = MINIMO_DIAS_MM7)
 export function indicadoresDiarios(dias: DiaUf[], ufs: UF[]): IndicadoresDiarios {
   const nulo: IndicadoresDiarios = {
     diaReferencia: null,
+    acumuladoMes: null,
     diaComparacao: null,
     totalDia: null,
     femeasDia: null,
@@ -194,8 +220,31 @@ export function indicadoresDiarios(dias: DiaUf[], ufs: UF[]): IndicadoresDiarios
   const diaComparacao = somarDias(diaReferencia, -7);
   const anterior = somar(diaComparacao);
 
+  // Do dia 1º do mês de referência até ele, só dias completos por todas.
+  const competencia = diaReferencia.slice(0, 7);
+  const diasDoMes = diasCompletos.filter((d) => d.startsWith(competencia));
+  let totalMes = 0;
+  let femeasMes = 0;
+  for (const d of diasDoMes) {
+    const soma = somar(d)!;
+    totalMes += soma.total;
+    femeasMes += soma.femeas;
+  }
+  const de = diasDoMes[0]!;
+  const acumuladoMes: AcumuladoMes = {
+    competencia,
+    de,
+    ate: diaReferencia,
+    dias: diasDoMes.length,
+    diasCorridos: Number(diaReferencia.slice(8, 10)) - Number(de.slice(8, 10)) + 1,
+    total: totalMes,
+    femeas: femeasMes,
+    pctFemeas: totalMes > 0 ? (femeasMes / totalMes) * 100 : null,
+  };
+
   return {
     diaReferencia,
+    acumuladoMes,
     diaComparacao,
     totalDia: atual.total,
     femeasDia: atual.femeas,

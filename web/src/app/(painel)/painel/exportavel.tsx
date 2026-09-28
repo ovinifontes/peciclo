@@ -25,6 +25,7 @@ export default function Exportavel({
   rotulo,
   ufs,
   kpis,
+  colunasKpi,
   children,
 }: {
   ref: Ref<HTMLDivElement>;
@@ -36,6 +37,8 @@ export default function Exportavel({
   ufs: readonly UF[];
   /** Os quatro cartões de KPI, prontos — a formatação mora no explorador. */
   kpis: ReactNode;
+  /** Cartões por linha — ver `CartaoExportavel`. */
+  colunasKpi?: 3 | 4;
   /** O conteúdo da visão: tabela completa ou os dois gráficos, sem animação. */
   children: ReactNode;
 }) {
@@ -46,7 +49,7 @@ export default function Exportavel({
       style={{ position: "fixed", left: -99999, top: 0, width: 1080 }}
       className="bg-white"
     >
-      <CartaoExportavel titulo={titulo} rotulo={rotulo} ufs={ufs} kpis={kpis}>
+      <CartaoExportavel titulo={titulo} rotulo={rotulo} ufs={ufs} kpis={kpis} colunasKpi={colunasKpi}>
         {children}
       </CartaoExportavel>
     </div>

@@ -180,6 +180,31 @@ describe("indicadoresDiarios", () => {
     expect(ind.variacaoFemeasPct).toBeCloseTo((80 / 700) * 100, 6);
   });
 
+  it("acumula o mês do dia de referência, só com os dias completos por todas", () => {
+    const ind = indicadoresDiarios(cenario, ["MT", "MS"]);
+    // 08, 10–14 e 15: sete dias completos; o 09 não existe e fica de fora.
+    expect(ind.acumuladoMes).toEqual({
+      competencia: "2026-08",
+      de: "2026-08-08",
+      ate: "2026-08-15",
+      dias: 7,
+      diasCorridos: 8,
+      total: 2000 + 5 * 2000 + 2200,
+      femeas: 700 + 5 * 720 + 780,
+      pctFemeas: ((700 + 5 * 720 + 780) / (2000 + 5 * 2000 + 2200)) * 100,
+    });
+  });
+
+  it("o acumulado não atravessa a virada do mês", () => {
+    const virada = agruparDias([
+      ...dia("MS", "2026-08-31", 400, 600),
+      ...dia("MS", "2026-09-01", 100, 100),
+      ...dia("MS", "2026-09-02", 100, 100),
+    ]);
+    const ind = indicadoresDiarios(virada, ["MS"]);
+    expect(ind.acumuladoMes).toMatchObject({ competencia: "2026-09", dias: 2, total: 400 });
+  });
+
   it("com uma UF só, o dia de referência avança até onde ela alcança", () => {
     const ind = indicadoresDiarios(cenario, ["MS"]);
     expect(ind.diaReferencia).toBe("2026-08-17");
