@@ -20,6 +20,7 @@ import {
   type FaixaAssentando,
 } from "@/app/(painel)/painel/explorador-diario";
 import type { Ver } from "@/app/(painel)/painel/explorador";
+import type { UF } from "@/app/(painel)/painel/estados";
 
 /** Os DOIS SVGs que cada visão de gráfico desenha: total e % de fêmeas. */
 const SVGS_ESPERADOS = 2;
@@ -43,6 +44,7 @@ const SVGS_ESPERADOS = 2;
 export default function CartaoImpressaoDiario({
   visao,
   pontos,
+  ufs: ufsPedidas,
   cortes,
   dataCabecalho,
   tabela,
@@ -50,6 +52,8 @@ export default function CartaoImpressaoDiario({
   visao: Ver;
   /** A série pronta (dia cru + MM7), calculada no servidor por `serie.ts`. */
   pontos: PontoDiario[];
+  /** Estados pedidos pela URL; ausente = todos os que têm dado por dia. */
+  ufs?: UF[];
   /** Cortes ISO calculados no servidor: 180 dias (linhas), 14 (colunas), 7 (assentando). */
   cortes: { linhas: string; colunas: string; assentando: string };
   /** Data do cabeçalho formatada no servidor (fuso de Brasília). */
@@ -58,9 +62,9 @@ export default function CartaoImpressaoDiario({
 }) {
   const cartaoRef = useRef<HTMLDivElement>(null);
 
-  // Todos os estados com dado — o estado inicial dos chips do explorador, que
-  // é também o que o export manual fotografa por padrão.
-  const ufs = ufsComDado(pontos);
+  // Sem seleção na URL: todos os estados com dado — o estado inicial dos
+  // chips do explorador, que é também o que o export manual fotografa.
+  const ufs = ufsPedidas ?? ufsComDado(pontos);
   const ind = indicadoresDiarios(pontos, ufs);
 
   // A janela da visão corrente: 180 dias nas Linhas, 14 nas Colunas — os

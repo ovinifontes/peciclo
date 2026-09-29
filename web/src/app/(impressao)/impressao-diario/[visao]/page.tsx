@@ -10,14 +10,16 @@ import {
   serieComMm7,
 } from "@/lib/dados";
 import { ehVisao } from "@/app/(painel)/painel/visoes";
+import type { UF } from "@/app/(painel)/painel/estados";
+import { ufsDaBusca } from "../../ufs-da-busca";
 import CartaoImpressaoDiario from "./cartao-impressao";
 
 // A lista mora em `painel/visoes.ts`, com os rótulos e o resto do contrato.
 // Duplicá-la aqui já custou: uma visão nova entrava no painel e esta rota
 // devolvia 404 para ela, quebrando a imagem só no dia seguinte de manhã.
 //
-// Aceitar as cinco NÃO muda o que o robô das 6h52 manda: a lista dele é
-// `VISOES_DO_ENVIO_DIARIO`, e continua em três.
+// O robô das 6h52 usa só as Colunas, quatro vezes: `?ufs=MT,MS,RO`, `?ufs=MT`,
+// `?ufs=MS` e `?ufs=RO` — as páginas do PDF diário.
 
 /**
  * A página que o robô do envio diário fotografa: SÓ o cartão exportável da
@@ -38,11 +40,22 @@ import CartaoImpressaoDiario from "./cartao-impressao";
  */
 export default async function ImpressaoDiario({
   params,
+  searchParams,
 }: PageProps<"/impressao-diario/[visao]">) {
   await exigirClienteAtivo();
 
   const { visao } = await params;
   if (!ehVisao(visao)) notFound();
+
+  // `?ufs=MT` etc.: as páginas do PDF diário. Sem o parâmetro, o cartão segue
+  // com todos os estados que têm dado por dia — o estado inicial dos chips.
+  const { ufs: ufsBruto } = await searchParams;
+  let ufs: UF[] | undefined;
+  if (typeof ufsBruto === "string") {
+    const pedidas = ufsDaBusca(ufsBruto);
+    if (!pedidas || pedidas.length === 0) notFound();
+    ufs = pedidas;
+  }
 
   const hoje = hojeSaoPaulo();
   const linhasDiarias = await lerAbateDiario();
@@ -64,6 +77,7 @@ export default async function ImpressaoDiario({
       <CartaoImpressaoDiario
         visao={visao}
         pontos={pontosDiarios}
+        ufs={ufs}
         cortes={{
           linhas: diasAntes(hoje, 180),
           colunas: diasAntes(hoje, 14),

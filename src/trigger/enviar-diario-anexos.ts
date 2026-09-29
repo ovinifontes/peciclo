@@ -14,8 +14,8 @@ import {
 import { imagensJaEnviadas, marcarImagensEnviadas } from "../dados/envios-imagens.js";
 
 /**
- * As páginas do PDF diário: a MESMA visão (Colunas do abate mensal por estado)
- * com quatro seleções de estado — o consolidado e depois cada estado sozinho.
+ * As páginas de cada PDF: a MESMA visão (Colunas) com quatro seleções de
+ * estado — o consolidado e depois cada estado sozinho.
  *
  * Quatro fotos do mesmo gráfico e não quatro gráficos diferentes de propósito:
  * o consolidado responde "como está o Centro-Oeste" e as três páginas
@@ -34,14 +34,25 @@ const PAGINAS_PDF = [
 const VISAO_PDF = "colunas";
 
 /**
+ * Os PDFs do dia, na ordem de envio: mesma receita (Colunas × 4 seleções),
+ * uma seção do painel cada. O diário entrou em 29/09/2026 a pedido do cliente,
+ * "igual manda no mensal".
+ */
+const PDFS = [
+  { rota: "impressao-mensal", titulo: "Abate mensal por estado", emoji: "📈", arquivo: "peciclo-abate-mensal" },
+  { rota: "impressao-diario", titulo: "Abate diário por estado", emoji: "📉", arquivo: "peciclo-abate-diario" },
+] as const;
+
+/**
  * Envio diário dos anexos — roda 7 min depois do cenário das 06:45, fechando a
  * sequência da manhã (planilhas 06:00/06:30, resumo 06:45, anexos 06:52).
  *
- * Manda DOIS arquivos, nesta ordem:
+ * Manda TRÊS arquivos, nesta ordem:
  *
- * 1. um PDF de 4 páginas com o abate mensal por estado em Colunas — o
+ * 1. um PDF de 4 páginas com o abate MENSAL por estado em Colunas — o
  *    consolidado e cada estado sozinho;
- * 2. a planilha do abate DIÁRIO por estado, a série inteira.
+ * 2. o mesmo PDF para o abate DIÁRIO por estado (desde 29/09/2026);
+ * 3. a planilha do abate diário por estado, a série inteira.
  *
  * Substituiu, em 28/09/2026, o envio de 3 imagens soltas da seção diária. O
  * motivo foi do cliente: três PNGs viram três rolagens no WhatsApp e a foto da
@@ -51,7 +62,8 @@ const VISAO_PDF = "colunas";
  * O princípio não mudou: as páginas do PDF são PIXEL POR PIXEL as imagens do
  * clique manual em "Exportar imagem". Nada é recriado no servidor — um Chromium
  * de verdade loga no site com a conta-robô (formulário real, RLS intacta), abre
- * `/impressao-mensal/colunas?ufs=…` e chama a MESMA captura do botão.
+ * `/impressao-mensal/colunas?ufs=…` e `/impressao-diario/colunas?ufs=…` e chama
+ * a MESMA captura do botão.
  *
  * Envio único por dia: `peciclo_envios_imagens` é o cadeado — redisparar a
  * rotina no mesmo dia sai com `jaEnviado` sem mandar nada de novo.
@@ -107,15 +119,19 @@ async function executar(dataLocal: string) {
     return { data: dataLocal, enviados: 0, jaEnviado: true, problemas };
   }
 
-  // --- Os dois anexos. O PDF fotografa o site; a planilha sai do banco.
-  const pdf = await montarPdfDoDia();
+  // --- Os anexos. Os PDFs fotografam o site; a planilha sai do banco.
+  const pdfs = await montarPdfsDoDia();
   const planilha = await gerarPlanilhaDiaria(dataLocal);
-  logger.info("anexos prontos", { pdf: pdf.length, planilha: planilha.length });
+  logger.info("anexos prontos", {
+    pdfs: pdfs.map((p) => `${p.arquivo}: ${p.pdf.length}`),
+    planilha: planilha.length,
+  });
 
-  const nomePdf = `peciclo-abate-mensal-${dataLocal}.pdf`;
   const nomePlanilha = `peciclo-abate-diario-${dataLocal}.xlsx`;
   // Arquivar antes de enviar: se a Evolution estiver fora, o dia não se perde.
-  await arquivarBruto({ caminho: `pdfs/${nomePdf}`, conteudo: pdf, contentType: "application/pdf" });
+  for (const { arquivo, pdf } of pdfs) {
+    await arquivarBruto({ caminho: `pdfs/${arquivo}-${dataLocal}.pdf`, conteudo: pdf, contentType: "application/pdf" });
+  }
   await arquivarBruto({ caminho: `planilhas-diario/${nomePlanilha}`, conteudo: planilha });
 
   // --- Destinatários: clientes ativos do banco ∪ configuração (regra da casa).
@@ -134,13 +150,13 @@ async function executar(dataLocal: string) {
   }).catch(() => false);
 
   const anexos = [
-    {
+    ...pdfs.map(({ titulo, emoji, arquivo, pdf }) => ({
       arquivo: pdf,
-      nomeArquivo: nomePdf,
+      nomeArquivo: `${arquivo}-${dataLocal}.pdf`,
       legenda:
-        `📈 Abate mensal por estado · Colunas — ${formatarDataBr(dataLocal)}\n` +
+        `${emoji} ${titulo} · Colunas — ${formatarDataBr(dataLocal)}\n` +
         `4 páginas: ${PAGINAS_PDF.map((p) => p.rotulo).join(", ")}.`,
-    },
+    })),
     {
       arquivo: planilha,
       nomeArquivo: nomePlanilha,
@@ -153,7 +169,7 @@ async function executar(dataLocal: string) {
   let enviados = 0;
   if (conectada) {
     for (const numero of destinatarios) {
-      // Uma falha não derruba o lote — e só conta quem recebeu os DOIS anexos.
+      // Uma falha não derruba o lote — e só conta quem recebeu TODOS os anexos.
       try {
         for (const [i, anexo] of anexos.entries()) {
           await enviarDocumento({
@@ -163,8 +179,8 @@ async function executar(dataLocal: string) {
             numero,
             ...anexo,
           });
-          // Pausa curta: chegar em ordem (PDF, depois planilha) vale mais que
-          // alguns segundos.
+          // Pausa curta: chegar em ordem (mensal, diário, planilha) vale mais
+          // que alguns segundos.
           if (i < anexos.length - 1) await pausa(500);
         }
         enviados++;
@@ -200,7 +216,7 @@ async function executar(dataLocal: string) {
     );
   }
 
-  return { data: dataLocal, paginas: PAGINAS_PDF.length, enviados, jaEnviado: false, problemas };
+  return { data: dataLocal, pdfs: pdfs.length, enviados, jaEnviado: false, problemas };
 }
 
 /**
@@ -260,11 +276,11 @@ export function montarHtmlDoPdf(pngs: Buffer[]): { html: string; largura: number
 }
 
 /**
- * Loga no site com a conta-robô, fotografa as quatro seleções e devolve o PDF.
- * Lança em qualquer tropeço — quem chama transforma em alerta. O browser
- * SEMPRE fecha.
+ * Loga no site com a conta-robô UMA vez e, para cada seção de `PDFS`,
+ * fotografa as quatro seleções e costura o PDF. Lança em qualquer tropeço —
+ * quem chama transforma em alerta. O browser SEMPRE fecha.
  */
-async function montarPdfDoDia(): Promise<Buffer> {
+async function montarPdfsDoDia(): Promise<Array<(typeof PDFS)[number] & { pdf: Buffer }>> {
   const site = (process.env.SITE_URL?.trim() || "https://peciclo.com.br").replace(/\/+$/, "");
   const email = process.env.ROBO_IMAGENS_EMAIL?.trim();
   const senha = process.env.ROBO_IMAGENS_SENHA?.trim();
@@ -289,20 +305,29 @@ async function montarPdfDoDia(): Promise<Buffer> {
     await pagina.click('button[type="submit"]');
     await pagina.waitForURL("**/painel", { timeout: 30_000 });
 
-    const pngs: Buffer[] = [];
-    for (const { ufs, rotulo } of PAGINAS_PDF) {
-      pngs.push(await fotografarCartao(pagina, site, ufs));
-      logger.info("página do PDF fotografada", { rotulo, bytes: pngs.at(-1)!.length });
+    const saida: Array<(typeof PDFS)[number] & { pdf: Buffer }> = [];
+    for (const secao of PDFS) {
+      const pngs: Buffer[] = [];
+      for (const { ufs, rotulo } of PAGINAS_PDF) {
+        pngs.push(await fotografarCartao(pagina, site, secao.rota, ufs));
+        logger.info("página do PDF fotografada", { secao: secao.rota, rotulo, bytes: pngs.at(-1)!.length });
+      }
+      saida.push({ ...secao, pdf: await montarPdf(browser, pngs) });
     }
-    return await montarPdf(browser, pngs);
+    return saida;
   } finally {
     await browser.close();
   }
 }
 
 /** Uma seleção de estados, fotografada pela MESMA captura do botão manual. */
-async function fotografarCartao(pagina: Page, site: string, ufs: string): Promise<Buffer> {
-  const url = `${site}/impressao-mensal/${VISAO_PDF}?ufs=${encodeURIComponent(ufs)}`;
+async function fotografarCartao(
+  pagina: Page,
+  site: string,
+  rota: string,
+  ufs: string,
+): Promise<Buffer> {
+  const url = `${site}/${rota}/${VISAO_PDF}?ufs=${encodeURIComponent(ufs)}`;
   await pagina.goto(url, { waitUntil: "load", timeout: 60_000 });
   // O cartão avisa quando os SVGs montaram.
   await pagina.waitForSelector("[data-impressao-pronta]", { state: "attached", timeout: 30_000 });
@@ -320,7 +345,7 @@ async function fotografarCartao(pagina: Page, site: string, ufs: string): Promis
   });
   const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
   if (base64 === dataUrl || base64.length < 1000) {
-    throw new Error(`captura de ${ufs} não devolveu um PNG`);
+    throw new Error(`captura de ${rota} ${ufs} não devolveu um PNG`);
   }
   return Buffer.from(base64, "base64");
 }
