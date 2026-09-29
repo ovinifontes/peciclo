@@ -23,7 +23,7 @@ import { imagensJaEnviadas, marcarImagensEnviadas } from "../dados/envios-imagen
  * com os mesmos eixos. Trocar a visão entre páginas obrigaria o leitor a
  * reaprender o desenho a cada folha.
  */
-const PAGINAS_PDF = [
+export const PAGINAS_PDF = [
   { ufs: "MT,MS,RO", rotulo: "MT + MS + RO" },
   { ufs: "MT", rotulo: "Mato Grosso" },
   { ufs: "MS", rotulo: "Mato Grosso do Sul" },
@@ -280,7 +280,7 @@ export function montarHtmlDoPdf(pngs: Buffer[]): { html: string; largura: number
  * fotografa as quatro seleções e costura o PDF. Lança em qualquer tropeço —
  * quem chama transforma em alerta. O browser SEMPRE fecha.
  */
-async function montarPdfsDoDia(): Promise<Array<(typeof PDFS)[number] & { pdf: Buffer }>> {
+export async function montarPdfsDoDia(): Promise<Array<(typeof PDFS)[number] & { pdf: Buffer }>> {
   const site = (process.env.SITE_URL?.trim() || "https://peciclo.com.br").replace(/\/+$/, "");
   const email = process.env.ROBO_IMAGENS_EMAIL?.trim();
   const senha = process.env.ROBO_IMAGENS_SENHA?.trim();
